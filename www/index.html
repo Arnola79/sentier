@@ -130,9 +130,17 @@ details.help li { margin-bottom: 6px; }
 .pin.end span { background: var(--trace); color: #fff; }
 
 @media (max-width: 760px) {
-  .app { grid-template-columns: 1fr; grid-template-rows: minmax(240px, 46%) 1fr; }
+  /* téléphone : la carte occupe le haut, le panneau défile en dessous */
+  .app { grid-template-columns: 1fr; grid-template-rows: minmax(260px, 50%) minmax(0, 1fr); }
+  #map { order: -1; }
   .panel { border-right: 0; border-top: 1px solid var(--line); }
+  .scroll { padding: 12px 14px 6px; gap: 12px; }
+  .brand { font-size: 20px; }
+  .opts { gap: 6px; }
+  .row .btn { padding: 6px 10px; font-size: 14px; }
   .stat b { font-size: 24px; }
+  #prof { height: 110px; }
+  .export { padding-top: 8px; }
 }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
 </style>

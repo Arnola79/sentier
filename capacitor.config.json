@@ -2,5 +2,8 @@
   "appId": "com.sentier.rando",
   "appName": "Sentier",
   "webDir": "www",
-  "backgroundColor": "#101914"
+  "backgroundColor": "#101914",
+  "android": {
+    "adjustMarginsForEdgeToEdge": "force"
+  }
 }
