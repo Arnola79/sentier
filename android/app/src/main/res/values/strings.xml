@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Sentier</string>
+    <string name="title_activity_main">Sentier</string>
+    <string name="package_name">com.sentier.rando</string>
+    <string name="custom_url_scheme">com.sentier.rando</string>
+</resources>
