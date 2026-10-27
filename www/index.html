@@ -39,7 +39,9 @@ button { cursor: pointer; }
 :focus-visible { outline: 2px solid var(--forest); outline-offset: 2px; }
 
 .app { display: grid; grid-template-columns: minmax(330px, 390px) 1fr; height: 100%; }
-#map { height: 100%; min-width: 0; background: #dfe6e0; }
+[hidden] { display: none !important; }
+.mapwrap { position: relative; min-width: 0; min-height: 0; }
+#map { position: absolute; inset: 0; background: #dfe6e0; }
 .panel {
   display: flex; flex-direction: column; min-height: 0; min-width: 0;
   background: var(--bg); border-right: 1px solid var(--line);
@@ -115,7 +117,27 @@ details.help summary { cursor: pointer; font-weight: 600; }
 details.help ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
 details.help li { margin-bottom: 6px; }
 
-.export { padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--line); background: var(--bg); }
+.export {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--line); background: var(--bg);
+}
+.primary.follow { background: var(--trace); color: #fff; }
+
+/* suivi de l'itinéraire */
+#hud {
+  position: absolute; z-index: 900; left: 10px; right: 10px; bottom: 34px; max-width: 440px; margin-inline: auto;
+  background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 8px;
+  padding: 10px 12px; box-shadow: 0 4px 18px rgba(0,0,0,.3);
+}
+#hud-off { margin-bottom: 8px; padding: 6px 10px; border-radius: 6px; font-weight: 600; color: #fff; }
+#hud-off.warn { background: #b42318; }
+#hud-off.ok { background: #1f5e45; }
+#hud-msg { margin: 0 0 6px; color: var(--muted); font-size: 14px; }
+.hud-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.hud-row b { display: block; font: 600 26px/1.05 var(--f-display); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.hud-row span { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+#h-recenter { margin-top: 8px; width: 100%; }
+.following .search, .following .opts, .following #pts button { opacity: .45; pointer-events: none; }
 .primary {
   width: 100%; padding: 12px; border: 0; border-radius: 6px; background: var(--forest); color: var(--forest-ink);
   font: 600 17px/1 var(--f-display); letter-spacing: .1em; text-transform: uppercase;
@@ -132,7 +154,7 @@ details.help li { margin-bottom: 6px; }
 @media (max-width: 760px) {
   /* téléphone : la carte occupe le haut, le panneau défile en dessous */
   .app { grid-template-columns: 1fr; grid-template-rows: minmax(260px, 50%) minmax(0, 1fr); }
-  #map { order: -1; }
+  .mapwrap { order: -1; }
   .panel { border-right: 0; border-top: 1px solid var(--line); }
   .scroll { padding: 12px 14px 6px; gap: 12px; }
   .brand { font-size: 20px; }
@@ -200,14 +222,28 @@ details.help li { margin-bottom: 6px; }
           <li><b>Garmin Connect (web)</b> : Entraînement, Parcours, Importer, choisis le .gpx, puis « Envoyer vers l'appareil ». La montre le reçoit à la prochaine synchronisation.</li>
           <li><b>USB</b> : copie le .gpx dans le dossier <code>Garmin/NewFiles</code> de la montre. Si le parcours n'apparaît pas, passe par Garmin Connect.</li>
           <li><b>Sur la montre</b> : activité Rando, Navigation, Parcours.</li>
+          <li><b>Sans montre</b> : touche « Suivre » pour te guider avec le téléphone (écran allumé).</li>
         </ol>
       </details>
     </div>
     <div class="export">
-      <button class="primary" id="gpx" type="button" disabled>Télécharger le GPX</button>
+      <button class="primary follow" id="follow" type="button" disabled>Suivre</button>
+      <button class="primary" id="gpx" type="button" disabled>Export GPX</button>
     </div>
   </aside>
-  <div id="map" role="application" aria-label="Carte"></div>
+  <div class="mapwrap">
+    <div id="map" role="application" aria-label="Carte"></div>
+    <div id="hud" hidden>
+      <div id="hud-off" hidden></div>
+      <p id="hud-msg">Recherche du signal GPS…</p>
+      <div class="hud-row">
+        <div><b id="h-rest">—</b><span>Restant</span></div>
+        <div><b id="h-up">—</b><span>D+ restant</span></div>
+        <div><b id="h-eta">—</b><span>Arrivée vers</span></div>
+      </div>
+      <button class="btn" id="h-recenter" type="button" hidden>Recentrer sur ma position</button>
+    </div>
+  </div>
 </main>
 
 <script src="leaflet/leaflet.js"></script>
@@ -334,7 +370,7 @@ details.help li { margin-bottom: 6px; }
     refreshMarkers(); save(); scheduleRoute();
   }
 
-  map.on("click", (e) => addPoint(e.latlng));
+  map.on("click", (e) => { if (!nav.on) addPoint(e.latlng); });
 
   /* ---------- calcul d'itinéraire (BRouter) ---------- */
   let timer = null, ctrl = null, firstFit = true;
@@ -377,11 +413,12 @@ details.help li { margin-bottom: 6px; }
   }
 
   function clearRoute() {
+    if (nav.on) stopNav();
     state.route = null;
     casing.setLatLngs([]); trace.setLatLngs([]);
     if (map.hasLayer(cursor)) map.removeLayer(cursor);
     showStats(null);
-    $("#gpx").disabled = true;
+    $("#gpx").disabled = true; $("#follow").disabled = true;
     drawProfile();
   }
 
@@ -404,11 +441,13 @@ details.help li { margin-bottom: 6px; }
     });
     let up = 0, down = 0, ref = sm[0];
     const TH = 3; // seuil d'hystérésis (m) pour ignorer le bruit du modèle d'altitude
+    const cumUp = [];
     for (const e of sm) {
       if (e - ref >= TH) { up += e - ref; ref = e; }
       else if (ref - e >= TH) { down += ref - e; ref = e; }
+      cumUp.push(up); // D+ cumulé le long du tracé, pour le D+ restant en suivi
     }
-    return { coords, cum, ele: sm, dist: cum[n - 1], up, down };
+    return { coords, cum, ele: sm, dist: cum[n - 1], up, down, cumUp };
   }
 
   function fmtDuration(h) {
@@ -434,14 +473,14 @@ details.help li { margin-bottom: 6px; }
     casing.setLatLngs(ll); trace.setLatLngs(ll);
     if (firstFit || !hadRoute) { map.fitBounds(trace.getBounds(), { padding: [40, 40] }); firstFit = false; }
     showStats(r);
-    $("#gpx").disabled = false;
+    $("#gpx").disabled = false; $("#follow").disabled = false;
     drawProfile();
   }
 
   /* ---------- profil altimétrique ---------- */
   const cv = $("#prof");
   const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
-  let hoverIdx = -1;
+  let hoverIdx = -1, meIdx = -1;
 
   function drawProfile() {
     const dpr = window.devicePixelRatio || 1;
@@ -495,6 +534,14 @@ details.help li { margin-bottom: 6px; }
       g.strokeStyle = ink; g.lineWidth = 1;
       g.beginPath(); g.moveTo(x, T); g.lineTo(x, T + ph); g.stroke();
       g.fillStyle = ink; g.beginPath(); g.arc(x, y, 4, 0, 7); g.fill();
+    }
+
+    if (meIdx >= 0 && meIdx < r.cum.length) {
+      const x = X(r.cum[meIdx]), y = Y(r.ele[meIdx]);
+      g.strokeStyle = "#1a73e8"; g.lineWidth = 2; g.setLineDash([4, 3]);
+      g.beginPath(); g.moveTo(x, T); g.lineTo(x, T + ph); g.stroke(); g.setLineDash([]);
+      g.fillStyle = "#1a73e8"; g.beginPath(); g.arc(x, y, 5, 0, 7); g.fill();
+      g.strokeStyle = "#ffffff"; g.lineWidth = 2; g.beginPath(); g.arc(x, y, 5, 0, 7); g.stroke();
     }
   }
 
@@ -636,6 +683,143 @@ details.help li { margin-bottom: 6px; }
   map.on("locationerror", () => setStatus("Position indisponible. Autorise la localisation dans le navigateur.", true));
   $("#name").value = state.name;
   $("#name").addEventListener("input", (e) => { state.name = e.target.value; save(); });
+
+
+  /* ---------- suivi de l'itinéraire (position GPS du téléphone) ---------- */
+  /* NAV-MATH-START */
+  function projectOnSegment(lat, lng, c1, c2) {
+    const k = Math.cos((lat * Math.PI) / 180);
+    const ax = (c1[0] - lng) * k * 111320, ay = (c1[1] - lat) * 110540;
+    const bx = (c2[0] - lng) * k * 111320, by = (c2[1] - lat) * 110540;
+    const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
+    const t = l2 ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / l2)) : 0;
+    return { d: Math.hypot(ax + t * dx, ay + t * dy), t };
+  }
+  function nearestOnRoute(r, lat, lng, from, to) {
+    let best = null;
+    for (let i = from; i <= to; i++) {
+      const p = projectOnSegment(lat, lng, r.coords[i], r.coords[i + 1]);
+      if (!best || p.d < best.d) best = { i, t: p.t, d: p.d };
+    }
+    best.along = r.cum[best.i] + best.t * (r.cum[best.i + 1] - r.cum[best.i]);
+    return best;
+  }
+  /* NAV-MATH-END */
+
+  const nav = { on: false, id: null, first: true, lastIdx: 0, follow: true, off: 0, lastBuzz: 0, arrived: false, lock: null };
+  let meDot = null, meAcc = null;
+
+  function locateOnRoute(lat, lng) {
+    const r = state.route, last = r.coords.length - 2;
+    if (nav.first) return nearestOnRoute(r, lat, lng, 0, last);
+    // recherche autour de la dernière position connue, pour ne pas sauter d'un bout à l'autre d'une boucle
+    const w = nearestOnRoute(r, lat, lng, Math.max(0, nav.lastIdx - 30), Math.min(last, nav.lastIdx + 300));
+    if (w.d > 100) {
+      const g = nearestOnRoute(r, lat, lng, 0, last);
+      if (g.d < w.d - 30) return g;
+    }
+    return w;
+  }
+
+  function buzz(pattern) { try { if (navigator.vibrate) navigator.vibrate(pattern); } catch { /* non bloquant */ } }
+
+  async function keepAwake(on) {
+    const KA = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.KeepAwake;
+    try {
+      if (KA) { if (on) await KA.keepAwake(); else await KA.allowSleep(); return; }
+      if (on && navigator.wakeLock) nav.lock = await navigator.wakeLock.request("screen");
+      else if (nav.lock) { await nav.lock.release(); nav.lock = null; }
+    } catch { /* écran non maintenu allumé : le suivi continue */ }
+  }
+
+  function onFix(pos) {
+    const lat = pos.coords.latitude, lng = pos.coords.longitude, acc = pos.coords.accuracy || 0;
+    const ll = L.latLng(lat, lng);
+    if (!meDot) {
+      meAcc = L.circle(ll, { radius: acc, stroke: false, fillColor: "#1a73e8", fillOpacity: 0.12, interactive: false }).addTo(map);
+      meDot = L.circleMarker(ll, { radius: 8, color: "#ffffff", weight: 3, fillColor: "#1a73e8", fillOpacity: 1, interactive: false }).addTo(map);
+    } else {
+      meDot.setLatLng(ll); meAcc.setLatLng(ll); meAcc.setRadius(acc);
+    }
+    if (nav.first) map.setView(ll, Math.max(map.getZoom(), 16));
+    else if (nav.follow) map.panTo(ll, { animate: true, duration: 0.5 });
+
+    const r = state.route;
+    if (!r) return;
+    const loc = locateOnRoute(lat, lng);
+    nav.first = false; nav.lastIdx = loc.i; meIdx = loc.i;
+
+    const remain = Math.max(0, r.dist - loc.along);
+    const upLeft = Math.max(0, r.up - r.cumUp[loc.i]);
+    const hours = remain / 1000 / 5 + upLeft / 600; // même règle de Naismith que la durée totale
+    $("#hud-msg").hidden = true;
+    $("#h-rest").textContent = remain >= 1000 ? (remain / 1000).toFixed(1).replace(".", ",") + " km" : Math.round(remain / 10) * 10 + " m";
+    $("#h-up").textContent = Math.round(upLeft) + " m";
+    $("#h-eta").textContent = new Date(Date.now() + hours * 3600000).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+
+    const banner = $("#hud-off"), limit = Math.max(40, acc * 1.5);
+    if (remain < 25 && loc.i >= r.coords.length - 40) {
+      nav.off = 0;
+      banner.hidden = false; banner.className = "ok"; banner.textContent = "Arrivée atteinte";
+      if (!nav.arrived) { nav.arrived = true; buzz([400, 200, 400, 200, 400]); }
+    } else if (loc.d > limit) {
+      nav.off++;
+      if (nav.off >= 2) { // deux positions de suite hors tracé, pour ignorer un saut de GPS isolé
+        banner.hidden = false; banner.className = "warn";
+        banner.textContent = "Hors itinéraire : " + Math.round(loc.d) + " m du tracé";
+        if (Date.now() - nav.lastBuzz > 30000) { nav.lastBuzz = Date.now(); buzz([300, 150, 300]); }
+      }
+    } else {
+      nav.off = 0; banner.hidden = true;
+    }
+    drawProfile();
+  }
+
+  function onFixError(e) {
+    if (e && e.code === 1) {
+      setStatus("Localisation refusée. Autorise-la pour l'app dans les réglages Android.", true);
+      stopNav();
+    } else {
+      $("#hud-msg").hidden = false; $("#hud-msg").textContent = "Signal GPS faible, nouvelle tentative…";
+    }
+  }
+
+  function startNav() {
+    if (!state.route || nav.on) return;
+    if (!navigator.geolocation) { setStatus("Localisation indisponible sur cet appareil.", true); return; }
+    nav.on = true; nav.first = true; nav.follow = true; nav.off = 0; nav.arrived = false; nav.lastBuzz = 0;
+    document.body.classList.add("following");
+    state.markers.forEach((m) => { if (m.dragging) m.dragging.disable(); });
+    $("#hud").hidden = false; $("#hud-off").hidden = true; $("#h-recenter").hidden = true;
+    $("#hud-msg").hidden = false; $("#hud-msg").textContent = "Recherche du signal GPS…";
+    ["#h-rest", "#h-up", "#h-eta"].forEach((id) => { $(id).textContent = "—"; });
+    $("#follow").textContent = "Arrêter";
+    setStatus("Suivi en cours. Garde l'écran allumé.");
+    keepAwake(true);
+    nav.id = navigator.geolocation.watchPosition(onFix, onFixError, { enableHighAccuracy: true, maximumAge: 1000, timeout: 20000 });
+  }
+
+  function stopNav() {
+    if (nav.id != null && navigator.geolocation) navigator.geolocation.clearWatch(nav.id);
+    nav.id = null; nav.on = false;
+    keepAwake(false);
+    document.body.classList.remove("following");
+    state.markers.forEach((m) => { if (m.dragging) m.dragging.enable(); });
+    if (meDot) { map.removeLayer(meDot); meDot = null; }
+    if (meAcc) { map.removeLayer(meAcc); meAcc = null; }
+    $("#hud").hidden = true;
+    $("#follow").textContent = "Suivre";
+    meIdx = -1; drawProfile();
+    setStatus("Suivi arrêté.");
+  }
+
+  $("#follow").addEventListener("click", () => { if (nav.on) stopNav(); else startNav(); });
+  map.on("dragstart", () => { if (nav.on && nav.follow) { nav.follow = false; $("#h-recenter").hidden = false; } });
+  $("#h-recenter").addEventListener("click", () => {
+    nav.follow = true; $("#h-recenter").hidden = true;
+    if (meDot) map.panTo(meDot.getLatLng());
+  });
+  document.addEventListener("visibilitychange", () => { if (nav.on && !document.hidden) keepAwake(true); });
 
   /* ---------- reprise de la session précédente ---------- */
   if (Array.isArray(saved.pts) && saved.pts.length) {

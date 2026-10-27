@@ -7,6 +7,7 @@
     "sync": "cap sync android"
   },
   "dependencies": {
+    "@capacitor-community/keep-awake": "^7.1.0",
     "@capacitor/android": "^7.6.9",
     "@capacitor/cli": "^7.6.9",
     "@capacitor/core": "^7.6.9",
