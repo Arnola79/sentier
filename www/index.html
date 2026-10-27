@@ -219,7 +219,7 @@ details.help li { margin-bottom: 6px; }
   const BROUTER = "https://brouter.de/brouter";
 
   /* ---------- état ---------- */
-  const state = { markers: [], profile: "hiking-mountain", loop: false, route: null, layer: "IGN Plan", name: "" };
+  const state = { markers: [], profile: "hiking-mountain", loop: false, route: null, layer: "OpenTopoMap", name: "" };
 
   function load() {
     try { return JSON.parse(localStorage.getItem(LS_KEY)) || {}; } catch { return {}; }
@@ -246,14 +246,15 @@ details.help li { margin-bottom: 6px; }
     "https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=" + layer +
     "&STYLE=normal&FORMAT=" + fmt + "&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}";
   const layers = {
-    "IGN Plan": L.tileLayer(ign("GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2", "image/png"), { maxZoom: 18, attribution: "© IGN" }),
     "OpenTopoMap": L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", { maxZoom: 17, subdomains: "abc", attribution: "© OpenTopoMap, © OpenStreetMap" }),
     "OpenStreetMap": L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" }),
-    "Satellite IGN": L.tileLayer(ign("ORTHOIMAGERY.ORTHOPHOTOS", "image/jpeg"), { maxZoom: 19, attribution: "© IGN" }),
-    "Topo Catalogne (ICGC)": L.tileLayer("https://geoserveis.icgc.cat/servei/catalunya/mapa-base/wmts/topo/MON3857/{z}/{x}/{y}.jpeg", { maxZoom: 19, attribution: "© ICGC" }),
-    "Topo Espagne (IGN-E)": L.tileLayer("https://www.ign.es/wmts/mapa-raster?request=getTile&layer=MTN&TileMatrixSet=GoogleMapsCompatible&TileMatrix={z}&TileCol={x}&TileRow={y}&format=image/jpeg", { maxZoom: 18, attribution: "© IGN España" }),
+    "IGN Plan (France)": L.tileLayer(ign("GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2", "image/png"), { maxZoom: 18, attribution: "© IGN" }),
+    "Satellite IGN (France)": L.tileLayer(ign("ORTHOIMAGERY.ORTHOPHOTOS", "image/jpeg"), { maxZoom: 19, attribution: "© IGN" }),
+    "Topo Catalogne (ICGC)": L.tileLayer("https://geoserveis.icgc.cat/servei/catalunya/mapa-base/wmts/topografic/MON3857NW/{z}/{x}/{y}.png", { maxZoom: 20, attribution: "© ICGC" }),
+    "Topo Espagne (IGN-E)": L.tileLayer("https://www.ign.es/wmts/mapa-raster?service=WMTS&request=GetTile&version=1.0.0&Format=image/jpeg&layer=MTN&style=default&tilematrixset=GoogleMapsCompatible&TileMatrix={z}&TileRow={y}&TileCol={x}", { minZoom: 4, maxZoom: 18, attribution: "© IGN España" }),
+    "Satellite Espagne (PNOA)": L.tileLayer("https://www.ign.es/wmts/pnoa-ma?service=WMTS&request=GetTile&version=1.0.0&Format=image/png&layer=OI.OrthoimageCoverage&style=default&tilematrixset=GoogleMapsCompatible&TileMatrix={z}&TileRow={y}&TileCol={x}", { minZoom: 4, maxZoom: 19, attribution: "© IGN España, PNOA" }),
   };
-  if (!layers[state.layer]) state.layer = "IGN Plan";
+  if (!layers[state.layer]) state.layer = "OpenTopoMap";
 
   const map = L.map("map", { zoomControl: true, layers: [layers[state.layer]] }).setView([46.6, 2.5], 6);
   L.control.layers(layers, null, { position: "topright" }).addTo(map);
