@@ -137,7 +137,19 @@ details.help li { margin-bottom: 6px; }
 .hud-row b { display: block; font: 600 26px/1.05 var(--f-display); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .hud-row span { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
 #h-recenter { margin-top: 8px; width: 100%; }
-.following .search, .following .opts, .following #pts button { opacity: .45; pointer-events: none; }
+.following .search, .following .opts, .following #pts button, .following .saved { opacity: .45; pointer-events: none; }
+
+/* randos enregistrées */
+.saved-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.saved-head h2 { margin: 0; }
+#hikes { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+#hikes li { display: flex; align-items: stretch; gap: 6px; }
+#hikes .open { flex: 1; min-width: 0; text-align: left; padding: 8px 10px; border: 1px solid var(--line); background: var(--surface); border-radius: 6px; }
+#hikes .open:hover { border-color: var(--forest); }
+#hikes .open b { display: block; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#hikes .open small { color: var(--muted); font-variant-numeric: tabular-nums; }
+#hikes .del { border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 0 12px; color: var(--muted); }
+#hikes .del.arm { color: #fff; background: #b42318; border-color: #b42318; }
 .primary {
   width: 100%; padding: 12px; border: 0; border-radius: 6px; background: var(--forest); color: var(--forest-ink);
   font: 600 17px/1 var(--f-display); letter-spacing: .1em; text-transform: uppercase;
@@ -213,6 +225,14 @@ details.help li { margin-bottom: 6px; }
       <section>
         <h2>Points de passage</h2>
         <ol id="pts"></ol>
+      </section>
+
+      <section class="saved">
+        <div class="saved-head">
+          <h2>Mes randos</h2>
+          <button class="btn" id="save" type="button" disabled>Enregistrer</button>
+        </div>
+        <ul id="hikes"></ul>
       </section>
 
       <details class="help">
@@ -418,7 +438,7 @@ details.help li { margin-bottom: 6px; }
     casing.setLatLngs([]); trace.setLatLngs([]);
     if (map.hasLayer(cursor)) map.removeLayer(cursor);
     showStats(null);
-    $("#gpx").disabled = true; $("#follow").disabled = true;
+    $("#gpx").disabled = true; $("#follow").disabled = true; $("#save").disabled = true;
     drawProfile();
   }
 
@@ -473,7 +493,7 @@ details.help li { margin-bottom: 6px; }
     casing.setLatLngs(ll); trace.setLatLngs(ll);
     if (firstFit || !hadRoute) { map.fitBounds(trace.getBounds(), { padding: [40, 40] }); firstFit = false; }
     showStats(r);
-    $("#gpx").disabled = false; $("#follow").disabled = false;
+    $("#gpx").disabled = false; $("#follow").disabled = false; $("#save").disabled = false;
     drawProfile();
   }
 
@@ -820,6 +840,101 @@ details.help li { margin-bottom: 6px; }
     if (meDot) map.panTo(meDot.getLatLng());
   });
   document.addEventListener("visibilitychange", () => { if (nav.on && !document.hidden) keepAwake(true); });
+
+
+  /* ---------- randos enregistrées ---------- */
+  const HK = "sentier.hikes.v1";
+  function loadHikes() {
+    try { const l = JSON.parse(localStorage.getItem(HK)); return Array.isArray(l) ? l : []; } catch { return []; }
+  }
+
+  function renderHikes() {
+    const ul = $("#hikes");
+    ul.textContent = "";
+    const list = loadHikes().sort((a, b) => b.savedAt - a.savedAt);
+    if (!list.length) {
+      const li = document.createElement("li");
+      li.className = "hint";
+      li.textContent = "Aucune rando enregistrée. Donne un nom à ta rando en haut du panneau, calcule l'itinéraire, puis touche « Enregistrer ».";
+      ul.append(li);
+      return;
+    }
+    list.forEach((h) => {
+      const li = document.createElement("li");
+      const open = document.createElement("button");
+      open.type = "button"; open.className = "open";
+      const b = document.createElement("b");
+      b.textContent = h.name;
+      const small = document.createElement("small");
+      const km = h.dist ? (h.dist / 1000).toFixed(1).replace(".", ",") + " km" : "";
+      const up = h.up ? " · D+ " + Math.round(h.up) + " m" : "";
+      const day = new Date(h.savedAt).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+      small.textContent = (km + up + (km ? " · " : "") + day);
+      open.append(b, small);
+      open.addEventListener("click", () => openHike(h));
+      const del = document.createElement("button");
+      del.type = "button"; del.className = "del"; del.textContent = "×";
+      del.setAttribute("aria-label", "Supprimer " + h.name);
+      let armed = null;
+      del.addEventListener("click", () => {
+        if (armed) { clearTimeout(armed); deleteHike(h.id); return; }
+        del.classList.add("arm"); del.textContent = "Supprimer ?";
+        armed = setTimeout(() => { armed = null; del.classList.remove("arm"); del.textContent = "×"; }, 3000);
+      });
+      li.append(open, del);
+      ul.append(li);
+    });
+  }
+
+  function saveHike() {
+    const r = state.route;
+    if (!r) return;
+    const name = (state.name || defaultName).trim() || defaultName;
+    const list = loadHikes();
+    const entry = {
+      id: String(Date.now()), name, savedAt: Date.now(),
+      pts: state.markers.map((m) => [+m.getLatLng().lat.toFixed(6), +m.getLatLng().lng.toFixed(6)]),
+      profile: state.profile, loop: state.loop, dist: r.dist, up: r.up, down: r.down,
+      // le tracé calculé est conservé : la rando se rouvre et se suit sans réseau
+      track: r.coords.map((c) => [+c[0].toFixed(5), +c[1].toFixed(5), c[2] == null ? 0 : +Number(c[2]).toFixed(1)]),
+    };
+    const i = list.findIndex((h) => h.name === name);
+    if (i >= 0) { entry.id = list[i].id; list[i] = entry; } else list.push(entry);
+    try {
+      localStorage.setItem(HK, JSON.stringify(list));
+      setStatus(i >= 0 ? "Rando « " + name + " » mise à jour." : "Rando « " + name + " » enregistrée.");
+    } catch {
+      setStatus("Enregistrement impossible : l'espace de stockage est plein. Supprime une rando.", true);
+    }
+    renderHikes();
+  }
+
+  function deleteHike(id) {
+    try { localStorage.setItem(HK, JSON.stringify(loadHikes().filter((h) => h.id !== id))); } catch { /* ignoré */ }
+    renderHikes();
+  }
+
+  function openHike(h) {
+    if (nav.on) return;
+    clearTimeout(timer); if (ctrl) ctrl.abort();
+    clearRoute();
+    state.markers.forEach((m) => map.removeLayer(m));
+    state.markers = [];
+    state.profile = h.profile || "hiking-mountain"; state.loop = !!h.loop; state.name = h.name;
+    $("#profile").value = state.profile; $("#loop").checked = state.loop; $("#name").value = h.name;
+    h.pts.forEach((p) => addPoint(L.latLng(p[0], p[1]), true));
+    save();
+    if (Array.isArray(h.track) && h.track.length > 1) {
+      firstFit = true;
+      setRoute(h.track);
+      setStatus("Rando « " + h.name + " » ouverte.");
+    } else {
+      scheduleRoute();
+    }
+  }
+
+  $("#save").addEventListener("click", saveHike);
+  renderHikes();
 
   /* ---------- reprise de la session précédente ---------- */
   if (Array.isArray(saved.pts) && saved.pts.length) {
