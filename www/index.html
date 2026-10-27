@@ -150,6 +150,8 @@ details.help li { margin-bottom: 6px; }
 #hikes .open small { color: var(--muted); font-variant-numeric: tabular-nums; }
 #hikes .del { border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 0 12px; color: var(--muted); }
 #hikes .del.arm { color: #fff; background: #b42318; border-color: #b42318; }
+.row-btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.note { margin: 8px 0 0; font-size: 13px; color: var(--muted); }
 .primary {
   width: 100%; padding: 12px; border: 0; border-radius: 6px; background: var(--forest); color: var(--forest-ink);
   font: 600 17px/1 var(--f-display); letter-spacing: .1em; text-transform: uppercase;
@@ -233,6 +235,12 @@ details.help li { margin-bottom: 6px; }
           <button class="btn" id="save" type="button" disabled>Enregistrer</button>
         </div>
         <ul id="hikes"></ul>
+        <div class="row-btns">
+          <button class="btn" id="backup" type="button">Sauvegarder mes randos</button>
+          <button class="btn" id="restore" type="button">Importer une sauvegarde</button>
+          <input id="restore-file" type="file" accept=".json,application/json" hidden>
+        </div>
+        <p class="note">Pour changer de téléphone : sauvegarde (Drive, e-mail, Fichiers), puis importe le fichier dans l'app du nouveau téléphone.</p>
       </section>
 
       <details class="help">
@@ -935,6 +943,78 @@ details.help li { margin-bottom: 6px; }
 
   $("#save").addEventListener("click", saveHike);
   renderHikes();
+
+
+  /* ---------- sauvegarde et restauration des randos ---------- */
+  async function shareFile(filename, text, mime) {
+    const cap = window.Capacitor;
+    if (cap && cap.isNativePlatform && cap.isNativePlatform()) {
+      const { Filesystem, Share } = cap.Plugins;
+      const w = await Filesystem.writeFile({ path: filename, data: text, directory: "CACHE", encoding: "utf8" });
+      await Share.share({ title: filename, url: w.uri, dialogTitle: "Enregistrer la sauvegarde" });
+      return;
+    }
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([text], { type: mime }));
+    a.download = filename; document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+  }
+
+  $("#backup").addEventListener("click", async () => {
+    const hikes = loadHikes();
+    if (!hikes.length) { setStatus("Rien à sauvegarder : enregistre d'abord une rando.", true); return; }
+    const stamp = new Date().toISOString().slice(0, 10);
+    try {
+      await shareFile("sentier-sauvegarde-" + stamp + ".json",
+        JSON.stringify({ app: "sentier", version: 1, exportedAt: new Date().toISOString(), hikes }), "application/json");
+      setStatus(hikes.length + " rando(s) dans la sauvegarde.");
+    } catch (e) {
+      if (!/cancel/i.test(String((e && e.message) || e))) setStatus("Sauvegarde impossible : " + ((e && e.message) || e), true);
+    }
+  });
+
+  function cleanHike(h) {
+    if (!h || typeof h.name !== "string" || !Array.isArray(h.pts)) return null;
+    const pts = h.pts.filter((p) => Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1]) && Math.abs(p[0]) <= 90 && Math.abs(p[1]) <= 180).map((p) => [p[0], p[1]]);
+    if (!pts.length) return null;
+    const okTrack = Array.isArray(h.track) && h.track.length > 1 && h.track.every((c) => Array.isArray(c) && Number.isFinite(c[0]) && Number.isFinite(c[1]));
+    const num = (v) => (Number.isFinite(v) ? v : 0);
+    const out = {
+      id: String(h.id || "i" + Date.now() + Math.floor(Math.random() * 1e6)),
+      name: h.name.trim().slice(0, 120) || "Rando",
+      savedAt: Number.isFinite(h.savedAt) ? h.savedAt : Date.now(),
+      pts, loop: !!h.loop, dist: num(h.dist), up: num(h.up), down: num(h.down),
+      profile: ["hiking-mountain", "trekking", "shortest"].includes(h.profile) ? h.profile : "hiking-mountain",
+    };
+    if (okTrack) out.track = h.track.map((c) => [c[0], c[1], Number.isFinite(c[2]) ? c[2] : 0]);
+    return out;
+  }
+
+  $("#restore").addEventListener("click", () => $("#restore-file").click());
+  $("#restore-file").addEventListener("change", async (e) => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!f) return;
+    try {
+      if (f.size > 20 * 1024 * 1024) throw new Error("fichier trop volumineux");
+      const data = JSON.parse(await f.text());
+      if (!data || data.app !== "sentier" || !Array.isArray(data.hikes)) throw new Error("ce fichier n'est pas une sauvegarde Sentier");
+      const incoming = data.hikes.map(cleanHike).filter(Boolean);
+      if (!incoming.length) throw new Error("aucune rando valide dans ce fichier");
+      const list = loadHikes();
+      let added = 0, updated = 0;
+      incoming.forEach((h) => {
+        const i = list.findIndex((x) => x.name === h.name);
+        if (i < 0) { list.push(h); added++; }
+        else if (h.savedAt > list[i].savedAt) { h.id = list[i].id; list[i] = h; updated++; }
+      });
+      localStorage.setItem(HK, JSON.stringify(list));
+      renderHikes();
+      setStatus(added + " rando(s) ajoutée(s)" + (updated ? ", " + updated + " mise(s) à jour" : "") + ".");
+    } catch (err) {
+      setStatus("Import impossible : " + ((err && err.message) || err) + ".", true);
+    }
+  });
 
   /* ---------- reprise de la session précédente ---------- */
   if (Array.isArray(saved.pts) && saved.pts.length) {
