@@ -5,6 +5,6 @@ Application de randonnée : calcul d'itinéraire entre un départ et une arrivé
 - Interface web : `www/index.html` (Leaflet embarqué dans `www/leaflet`).
 - Version HTML autonome : `html/sentier.html`, un seul fichier à ouvrir dans un navigateur (Leaflet chargé en ligne). Mis à jour automatiquement à chaque build.
 - Application Android : Capacitor, dossier `android/`.
-- APK et version HTML : construits par GitHub Actions à chaque push sur `main`, publiés dans la release `apk-latest` (`sentier.apk` et `sentier.html`). La version web est aussi en ligne : https://arnola79.github.io/sentier/
+- APK et version HTML : construits par GitHub Actions à chaque push sur `main`, publiés dans la release `apk-latest` (`sentier.apk` et `sentier.html`).
 
 Pour modifier l'app, change `www/index.html`, puis pousse sur `main`. Le nouvel APK est prêt quelques minutes plus tard.

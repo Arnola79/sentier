@@ -62,15 +62,6 @@ jobs:
             git push origin HEAD:main
           fi
 
-      - name: Publier la version web (GitHub Pages)
-        run: |
-          mkdir site && cp sentier.html site/index.html && touch site/.nojekyll
-          cd site
-          git init -q -b gh-pages
-          git add -A
-          git -c user.name="github-actions" -c user.email="github-actions@users.noreply.github.com" commit -q -m "Version web, build n°${{ github.run_number }}"
-          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" gh-pages
-
       - uses: actions/upload-artifact@v4
         with:
           name: sentier-apk
@@ -85,4 +76,4 @@ jobs:
           gh release delete apk-latest --cleanup-tag --yes || true
           gh release create apk-latest sentier.apk sentier.html \
             --title "Sentier : dernière version" \
-            --notes "Build n°${{ github.run_number }}. sentier.apk : l'application Android, à ouvrir pour l'installer. sentier.html : la même application en page web, aussi en ligne sur https://arnola79.github.io/sentier/ (connexion internet nécessaire)."
+            --notes "Build n°${{ github.run_number }}. sentier.apk : l'application Android, à ouvrir pour l'installer. sentier.html : la même application en page web, à ouvrir dans un navigateur sur téléphone ou PC (connexion internet nécessaire)."
