@@ -45,16 +45,25 @@ jobs:
       - name: Nommer l'APK
         run: cp android/app/build/outputs/apk/debug/app-debug.apk sentier.apk
 
+      - name: Construire la version HTML autonome
+        run: |
+          sed -e 's#href="leaflet/leaflet.css"#href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"#' \
+              -e 's#src="leaflet/leaflet.js"#src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"#' \
+              www/index.html > sentier.html
+          if grep -q '"leaflet/' sentier.html; then echo "::error::Leaflet local encore référencé dans sentier.html"; exit 1; fi
+
       - uses: actions/upload-artifact@v4
         with:
           name: sentier-apk
-          path: sentier.apk
+          path: |
+            sentier.apk
+            sentier.html
 
       - name: Publier dans la release « apk-latest »
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete apk-latest --cleanup-tag --yes || true
-          gh release create apk-latest sentier.apk \
-            --title "Sentier : dernier APK" \
-            --notes "APK compilé automatiquement (build n°${{ github.run_number }}). Télécharge sentier.apk puis ouvre-le pour l'installer."
+          gh release create apk-latest sentier.apk sentier.html \
+            --title "Sentier : dernière version" \
+            --notes "Build n°${{ github.run_number }}. sentier.apk : l'application Android, à ouvrir pour l'installer. sentier.html : la même application en page web, à ouvrir dans un navigateur sur téléphone ou PC (connexion internet nécessaire)."
