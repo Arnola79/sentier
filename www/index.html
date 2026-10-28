@@ -206,7 +206,7 @@ details.help li { margin-bottom: 6px; }
         <div class="row">
           <button class="btn" id="undo" type="button">Annuler le dernier point</button>
           <button class="btn" id="clear" type="button">Tout effacer</button>
-          <button class="btn" id="locate" type="button">Ma position</button>
+          <button class="btn" id="locate" type="button">Partir de ma position</button>
         </div>
       </div>
 
@@ -703,12 +703,65 @@ details.help li { margin-bottom: 6px; }
     state.markers = []; firstFit = true;
     refreshMarkers(); save(); scheduleRoute();
   });
-  $("#locate").addEventListener("click", () => {
+  /* ---------- localisation : GPS natif dans l'app Android, navigateur sinon ---------- */
+  function nativeGeo() {
+    const c = window.Capacitor;
+    return c && c.isNativePlatform && c.isNativePlatform() && c.Plugins && c.Plugins.Geolocation ? c.Plugins.Geolocation : null;
+  }
+  async function ensureLocPermission(G) {
+    let p = await G.checkPermissions();
+    const ok = (x) => x && (x.location === "granted" || x.coarseLocation === "granted");
+    if (!ok(p)) p = await G.requestPermissions({ permissions: ["location"] });
+    if (!ok(p)) throw { code: 1, message: "permission denied" };
+  }
+  async function getPosition() {
+    const opts = { enableHighAccuracy: true, timeout: 25000, maximumAge: 15000 };
+    const G = nativeGeo();
+    if (G) { await ensureLocPermission(G); return G.getCurrentPosition(opts); }
+    if (!navigator.geolocation) throw { message: "localisation indisponible sur cet appareil" };
+    return new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej, opts));
+  }
+  function isDenied(e) {
+    const m = String((e && (e.message || e)) || "");
+    return (e && e.code === 1) || /denied|permission/i.test(m);
+  }
+  function locError(e) {
+    const m = String((e && (e.message || e)) || "");
+    if (isDenied(e)) return "Localisation refusée. Autorise-la : réglages Android, Applications, Sentier, Autorisations, Position.";
+    if (/not enabled|disabled|services|provider/i.test(m)) return "La localisation du téléphone est désactivée. Active « Position » dans les réglages rapides, puis réessaie.";
+    if ((e && e.code === 3) || /timeout|timed out/i.test(m)) return "Pas de signal GPS pour l'instant. Mets-toi à découvert et réessaie.";
+    return "Position indisponible : " + (m || "erreur inconnue") + ".";
+  }
+
+  $("#locate").addEventListener("click", async () => {
+    const btn = $("#locate");
+    if (btn.disabled) return;
+    btn.disabled = true;
     setStatus("Recherche de ta position…");
-    map.locate({ setView: true, maxZoom: 14 });
+    try {
+      const pos = await getPosition();
+      const ll = L.latLng(pos.coords.latitude, pos.coords.longitude);
+      const first = state.markers[0];
+      if (first && first.getLatLng().distanceTo(ll) < 30) {
+        first.setLatLng(ll); // départ déjà posé ici : on l'ajuste
+      } else {
+        // ta position devient le départ ; un point déjà posé devient l'arrivée ou une étape
+        addPoint(ll, true);
+        state.markers.unshift(state.markers.pop());
+        refreshMarkers();
+      }
+      save();
+      if (state.markers.length < 2) map.setView(ll, Math.max(map.getZoom(), 15));
+      scheduleRoute();
+      setStatus(state.markers.length < 2
+        ? "Départ posé sur ta position (précision " + Math.round(pos.coords.accuracy || 0) + " m). Touche la carte pour poser l'arrivée."
+        : "Départ posé sur ta position.");
+    } catch (e) {
+      setStatus(locError(e), true);
+    } finally {
+      btn.disabled = false;
+    }
   });
-  map.on("locationfound", () => setStatus("Position trouvée."));
-  map.on("locationerror", () => setStatus("Position indisponible. Autorise la localisation dans le navigateur.", true));
   $("#name").value = state.name;
   $("#name").addEventListener("input", (e) => { state.name = e.target.value; save(); });
 
@@ -804,17 +857,18 @@ details.help li { margin-bottom: 6px; }
   }
 
   function onFixError(e) {
-    if (e && e.code === 1) {
-      setStatus("Localisation refusée. Autorise-la pour l'app dans les réglages Android.", true);
+    if (isDenied(e) || /not enabled|disabled|services/i.test(String((e && e.message) || ""))) {
       stopNav();
+      setStatus(locError(e), true);
     } else {
       $("#hud-msg").hidden = false; $("#hud-msg").textContent = "Signal GPS faible, nouvelle tentative…";
     }
   }
 
-  function startNav() {
+  async function startNav() {
     if (!state.route || nav.on) return;
-    if (!navigator.geolocation) { setStatus("Localisation indisponible sur cet appareil.", true); return; }
+    const G = nativeGeo();
+    if (!G && !navigator.geolocation) { setStatus("Localisation indisponible sur cet appareil.", true); return; }
     nav.on = true; nav.first = true; nav.follow = true; nav.off = 0; nav.arrived = false; nav.lastBuzz = 0;
     document.body.classList.add("following");
     state.markers.forEach((m) => { if (m.dragging) m.dragging.disable(); });
@@ -824,11 +878,24 @@ details.help li { margin-bottom: 6px; }
     $("#follow").textContent = "Arrêter";
     setStatus("Suivi en cours. Garde l'écran allumé.");
     keepAwake(true);
-    nav.id = navigator.geolocation.watchPosition(onFix, onFixError, { enableHighAccuracy: true, maximumAge: 1000, timeout: 20000 });
+    const opts = { enableHighAccuracy: true, maximumAge: 1000, timeout: 20000 };
+    if (G) {
+      try { await ensureLocPermission(G); } catch (e) { stopNav(); setStatus(locError(e), true); return; }
+      if (!nav.on) return;
+      nav.native = true;
+      nav.id = await G.watchPosition(opts, (pos, err) => { if (err) onFixError(err); else if (pos) onFix(pos); });
+      if (!nav.on) { G.clearWatch({ id: nav.id }); nav.id = null; }
+    } else {
+      nav.native = false;
+      nav.id = navigator.geolocation.watchPosition(onFix, onFixError, opts);
+    }
   }
 
   function stopNav() {
-    if (nav.id != null && navigator.geolocation) navigator.geolocation.clearWatch(nav.id);
+    if (nav.id != null) {
+      if (nav.native) { const G = nativeGeo(); if (G) G.clearWatch({ id: nav.id }); }
+      else if (navigator.geolocation) navigator.geolocation.clearWatch(nav.id);
+    }
     nav.id = null; nav.on = false;
     keepAwake(false);
     document.body.classList.remove("following");
