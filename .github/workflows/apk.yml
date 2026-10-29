@@ -53,14 +53,20 @@ jobs:
           if grep -q '"leaflet/' sentier.html; then echo "::error::Leaflet local encore référencé dans sentier.html"; exit 1; fi
 
       - name: Mettre à jour html/sentier.html dans le dépôt
+        continue-on-error: true
         run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
           mkdir -p html && cp sentier.html html/sentier.html
-          if ! git diff --quiet -- html/sentier.html || [ -n "$(git status --porcelain html)" ]; then
-            git add html/sentier.html
-            git -c user.name="github-actions" -c user.email="github-actions@users.noreply.github.com" commit -q -m "Met à jour html/sentier.html (build n°${{ github.run_number }})"
-            git pull -q --rebase origin main
-            git push origin HEAD:main
-          fi
+          git add html/sentier.html
+          if git diff --cached --quiet; then echo "html/sentier.html déjà à jour"; exit 0; fi
+          git commit -q -m "Met à jour html/sentier.html (build n°${{ github.run_number }})"
+          for i in 1 2 3; do
+            git fetch -q --depth=50 origin main && git rebase -q origin/main && git push -q origin HEAD:main && exit 0
+            git rebase --abort 2>/dev/null || true
+            sleep 5
+          done
+          echo "::warning::html/sentier.html n'a pas pu être poussé dans le dépôt"
 
       - name: Publier la version web (GitHub Pages)
         run: |
