@@ -50,6 +50,7 @@ button { cursor: pointer; }
 
 .head { display: flex; align-items: baseline; gap: 12px; }
 .brand { font: 700 22px/1 var(--f-display); letter-spacing: .14em; color: var(--forest); }
+#ver { flex: none; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 #name {
   flex: 1; min-width: 0; border: 0; border-bottom: 1px dashed var(--line); background: transparent;
   padding: 4px 0; font-weight: 500;
@@ -197,6 +198,7 @@ details.help li { margin-bottom: 6px; }
       </div>
       <div class="head">
         <div class="brand">SENTIER</div>
+        <span id="ver" hidden></span>
         <input id="name" aria-label="Nom de la randonnée" autocomplete="off">
       </div>
 
@@ -290,6 +292,8 @@ details.help li { margin-bottom: 6px; }
   "use strict";
   const $ = (s) => document.querySelector(s);
   const LS_KEY = "sentier.v1";
+  const APP_BUILD = "dev"; // remplacé par le numéro de build lors de la compilation
+  if (/^\d+$/.test(APP_BUILD)) { $("#ver").textContent = "v" + APP_BUILD; $("#ver").hidden = false; }
   const BROUTER = "https://brouter.de/brouter";
 
   /* ---------- état ---------- */
@@ -1109,7 +1113,7 @@ details.help li { margin-bottom: 6px; }
       const j = await res.json();
       if (Number.isFinite(j.build) && typeof j.url === "string" && j.build > Number(mine.build)) {
         apkUrl = j.url;
-        $("#upd-txt").innerHTML = "<b>Nouvelle version de Sentier disponible</b> (n°" + j.build + ").";
+        $("#upd-txt").innerHTML = "<b>Nouvelle version de Sentier disponible</b> : v" + j.build + " (installée : v" + Number(mine.build) + ").";
         $("#upd").hidden = false;
       }
     } catch { /* pas de réseau : on réessaiera au prochain lancement */ }

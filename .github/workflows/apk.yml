@@ -26,6 +26,11 @@ jobs:
       - name: Installer les dépendances
         run: npm install --no-audit --no-fund
 
+      - name: Inscrire le numéro de version
+        run: |
+          sed -i 's/const APP_BUILD = "dev";/const APP_BUILD = "${{ github.run_number }}";/' www/index.html
+          grep -q 'const APP_BUILD = "${{ github.run_number }}";' www/index.html
+
       - name: Synchroniser le projet Android
         run: npx cap sync android
 
@@ -54,7 +59,9 @@ jobs:
 
       - name: Vérifier que html/sentier.html est à jour
         run: |
-          if ! cmp -s sentier.html html/sentier.html; then
+          git show HEAD:www/index.html | sed -e 's#href="leaflet/leaflet.css"#href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"#' \
+            -e 's#src="leaflet/leaflet.js"#src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"#' > expected.html
+          if ! cmp -s expected.html html/sentier.html; then
             echo "::warning::html/sentier.html ne correspond pas à www/index.html : régénère-le avant le prochain push"
           fi
 
