@@ -150,6 +150,9 @@ details.help li { margin-bottom: 6px; }
 #hikes .open small { color: var(--muted); font-variant-numeric: tabular-nums; }
 #hikes .del { border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 0 12px; color: var(--muted); }
 #hikes .del.arm { color: #fff; background: #b42318; border-color: #b42318; }
+#upd { border: 1px solid var(--forest); border-radius: 8px; padding: 10px 12px; background: var(--surface); display: flex; flex-direction: column; gap: 8px; }
+#upd p { margin: 0; }
+#upd .row-btns { margin-top: 0; }
 .row-btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
 .note { margin: 8px 0 0; font-size: 13px; color: var(--muted); }
 .primary {
@@ -185,6 +188,13 @@ details.help li { margin-bottom: 6px; }
 <main class="app">
   <aside class="panel">
     <div class="scroll">
+      <div id="upd" hidden role="status">
+        <p id="upd-txt"><b>Nouvelle version de Sentier disponible.</b></p>
+        <div class="row-btns">
+          <button class="btn" id="upd-go" type="button">Installer</button>
+          <button class="btn" id="upd-later" type="button">Plus tard</button>
+        </div>
+      </div>
       <div class="head">
         <div class="brand">SENTIER</div>
         <input id="name" aria-label="Nom de la randonnée" autocomplete="off">
@@ -1082,6 +1092,49 @@ details.help li { margin-bottom: 6px; }
       setStatus("Import impossible : " + ((err && err.message) || err) + ".", true);
     }
   });
+
+
+  /* ---------- mise à jour de l'APK (vérifiée une fois, au démarrage) ---------- */
+  const APK_INFO_URL = "https://arnola79.github.io/sentier/apk.json";
+  let apkUrl = null;
+  async function checkApkUpdate() {
+    const cap = window.Capacitor;
+    if (!(cap && cap.isNativePlatform && cap.isNativePlatform())) return;
+    const U = cap.Plugins && cap.Plugins.ApkUpdater;
+    if (!U) return;
+    try {
+      const mine = await U.info();
+      const res = await fetch(APK_INFO_URL + "?t=" + Date.now(), { cache: "no-store" });
+      if (!res.ok) return;
+      const j = await res.json();
+      if (Number.isFinite(j.build) && typeof j.url === "string" && j.build > Number(mine.build)) {
+        apkUrl = j.url;
+        $("#upd-txt").innerHTML = "<b>Nouvelle version de Sentier disponible</b> (n°" + j.build + ").";
+        $("#upd").hidden = false;
+      }
+    } catch { /* pas de réseau : on réessaiera au prochain lancement */ }
+  }
+  $("#upd-later").addEventListener("click", () => { $("#upd").hidden = true; });
+  $("#upd-go").addEventListener("click", async () => {
+    const U = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.ApkUpdater;
+    if (!U || !apkUrl) return;
+    const go = $("#upd-go"), txt = $("#upd-txt");
+    go.disabled = true;
+    txt.textContent = "Téléchargement de la mise à jour… (environ 5 Mo)";
+    try {
+      const r = await U.install({ url: apkUrl });
+      if (r && r.status === "permission") {
+        txt.textContent = "Android demande d'autoriser Sentier à installer des applications. Active l'autorisation, reviens ici, puis touche Installer.";
+      } else {
+        txt.textContent = "Android va demander de confirmer : touche « Mettre à jour ». Tes randos sont conservées.";
+      }
+    } catch (e) {
+      txt.textContent = "Mise à jour impossible : " + ((e && e.message) || e) + ". Vérifie la connexion puis réessaie.";
+    } finally {
+      go.disabled = false;
+    }
+  });
+  checkApkUpdate();
 
   /* ---------- reprise de la session précédente ---------- */
   if (Array.isArray(saved.pts) && saved.pts.length) {

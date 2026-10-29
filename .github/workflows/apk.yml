@@ -65,6 +65,7 @@ jobs:
       - name: Publier la version web (GitHub Pages)
         run: |
           mkdir site && cp sentier.html site/index.html && touch site/.nojekyll
+          printf '{"build":%d,"url":"https://github.com/%s/releases/download/apk-latest/sentier.apk"}' ${{ github.run_number }} "${{ github.repository }}" > site/apk.json
           cd site
           git init -q -b gh-pages
           git add -A
