@@ -228,6 +228,11 @@ details.help li { margin-bottom: 6px; }
   .stat { padding: 0 6px; }
   #prof { height: 100px; }
   .card { padding: 12px; gap: 10px; }
+  /* pendant une saisie : le panneau prend tout l'écran au-dessus du clavier */
+  .typing .app { grid-template-rows: 0 minmax(0, 1fr); }
+  .typing .mapwrap { visibility: hidden; }
+  .typing .panel { border-top: 0; }
+  .typing .actions { display: none; }
   /* pendant le suivi : la carte prend tout l'écran au-dessus des boutons */
   .following .app { grid-template-rows: minmax(0, 1fr) auto; }
   .following .topbar, .following .scroll { display: none; }
@@ -982,6 +987,7 @@ details.help li { margin-bottom: 6px; }
         b.addEventListener("click", () => {
           results.hidden = true; results.textContent = "";
           $("#q").value = "";
+          endTyping();
           const parts = String(p.display_name).split(",").map((x) => x.trim()).filter(Boolean);
           const label = (p.name && parts[0] !== p.name ? p.name + ", " : "") + parts.slice(0, 2).join(", ");
           setDestination(L.latLng(+p.lat, +p.lon), label.slice(0, 70));
@@ -991,7 +997,49 @@ details.help li { margin-bottom: 6px; }
       results.hidden = false;
     } catch { setStatus("Recherche indisponible pour le moment.", true); }
   });
-  document.addEventListener("click", (e) => { if (!e.target.closest("#search")) results.hidden = true; });
+  document.addEventListener("click", (e) => {
+    if (e.target.closest("#search")) return;
+    results.hidden = true;
+    if (document.activeElement !== $("#q") && document.activeElement !== $("#name")) endTyping();
+  });
+
+  /* ---------- saisie sur téléphone : la carte s'efface pour laisser voir le champ au-dessus du clavier ---------- */
+  const TYPING_FIELDS = "#q, #name";
+  const phone = () => window.matchMedia("(max-width: 760px)").matches;
+  function startTyping(el) {
+    if (!phone() || document.body.classList.contains("following")) return;
+    document.body.classList.add("typing");
+    setTimeout(() => { try { el.scrollIntoView({ block: "start" }); } catch { /* ignoré */ } }, 120);
+  }
+  function endTyping() {
+    if (!document.body.classList.contains("typing")) return;
+    document.body.classList.remove("typing");
+    setTimeout(() => map.invalidateSize(), 60);
+  }
+  document.addEventListener("focusin", (e) => { if (e.target.matches && e.target.matches(TYPING_FIELDS)) startTyping(e.target); });
+  document.addEventListener("focusout", (e) => {
+    if (!(e.target.matches && e.target.matches(TYPING_FIELDS))) return;
+    // délai : un toucher sur un résultat de recherche doit arriver avant que la carte revienne
+    setTimeout(() => {
+      const a = document.activeElement;
+      if (a && a.matches && a.matches(TYPING_FIELDS)) return;
+      if (!results.hidden) return;
+      endTyping();
+    }, 350);
+  });
+  // clavier fermé avec la touche retour : le champ garde le focus mais l'écran retrouve sa hauteur
+  if (window.visualViewport) {
+    let tallest = window.visualViewport.height;
+    window.visualViewport.addEventListener("resize", () => {
+      const h = window.visualViewport.height;
+      tallest = Math.max(tallest, h);
+      if (h > tallest * 0.85 && document.body.classList.contains("typing") && results.hidden) {
+        const a = document.activeElement;
+        if (a && a.blur) a.blur();
+        endTyping();
+      }
+    });
+  }
 
   /* ---------- commandes ---------- */
   $("#profile").value = state.profile;
