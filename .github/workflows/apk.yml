@@ -65,16 +65,6 @@ jobs:
             echo "::warning::html/sentier.html ne correspond pas à www/index.html : régénère-le avant le prochain push"
           fi
 
-      - name: Publier la version web (GitHub Pages)
-        run: |
-          mkdir site && cp sentier.html site/index.html && touch site/.nojekyll
-          printf '{"build":%d,"url":"https://github.com/%s/releases/download/apk-latest/sentier.apk"}' ${{ github.run_number }} "${{ github.repository }}" > site/apk.json
-          cd site
-          git init -q -b gh-pages
-          git add -A
-          git -c user.name="github-actions" -c user.email="github-actions@users.noreply.github.com" commit -q -m "Version web, build n°${{ github.run_number }}"
-          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" gh-pages
-
       - uses: actions/upload-artifact@v4
         with:
           name: sentier-apk
@@ -85,8 +75,41 @@ jobs:
       - name: Publier dans la release « apk-latest »
         env:
           GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          NOTES: "Build n°${{ github.run_number }}. sentier.apk : l'application Android, à ouvrir pour l'installer. sentier.html : la même application en page web, aussi en ligne sur https://arnola79.github.io/sentier/ (connexion internet nécessaire)."
         run: |
-          gh release delete apk-latest --cleanup-tag --yes || true
-          gh release create apk-latest sentier.apk sentier.html \
-            --title "Sentier : dernière version" \
-            --notes "Build n°${{ github.run_number }}. sentier.apk : l'application Android, à ouvrir pour l'installer. sentier.html : la même application en page web, aussi en ligne sur https://arnola79.github.io/sentier/ (connexion internet nécessaire)."
+          set -e
+          # la release est mise à jour sur place (pas de suppression), et toujours publiée, jamais en brouillon
+          ID=$(gh api "repos/$REPO/releases?per_page=100" --jq '.[] | select(.tag_name=="apk-latest") | .id' | head -1)
+          if [ -z "$ID" ]; then
+            ID=$(gh api -X POST "repos/$REPO/releases" -f tag_name=apk-latest -f target_commitish="${{ github.sha }}" \
+              -f name="Sentier : dernière version" -f body="$NOTES" -F draft=false --jq .id)
+          fi
+          gh api -X PATCH "repos/$REPO/releases/$ID" -f name="Sentier : dernière version" -f body="$NOTES" -F draft=false --jq '.draft'
+          for f in sentier.apk sentier.html; do
+            OLD=$(gh api "repos/$REPO/releases/$ID/assets" --jq ".[] | select(.name==\"$f\") | .id")
+            if [ -n "$OLD" ]; then gh api -X DELETE "repos/$REPO/releases/assets/$OLD"; fi
+            case "$f" in *.apk) T=application/vnd.android.package-archive;; *) T=text/html;; esac
+            curl -sS --fail -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Content-Type: $T" \
+              --data-binary "@$f" "https://uploads.github.com/repos/$REPO/releases/$ID/assets?name=$f" > /dev/null
+          done
+          gh api -X PATCH "repos/$REPO/releases/$ID" -F draft=false --jq '.draft'
+
+      - name: Vérifier que l'APK est téléchargeable
+        run: |
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" -L -r 0-0 "https://github.com/${{ github.repository }}/releases/download/apk-latest/sentier.apk")
+            if [ "$code" = "200" ] || [ "$code" = "206" ]; then echo "APK téléchargeable"; exit 0; fi
+            echo "Réponse $code, nouvel essai"; sleep 6
+          done
+          echo "::error::L'APK publié n'est pas téléchargeable"; exit 1
+
+      - name: Publier la version web (GitHub Pages)
+        run: |
+          mkdir site && cp sentier.html site/index.html && touch site/.nojekyll
+          printf '{"build":%d,"url":"https://github.com/%s/releases/download/apk-latest/sentier.apk"}' ${{ github.run_number }} "${{ github.repository }}" > site/apk.json
+          cd site
+          git init -q -b gh-pages
+          git add -A
+          git -c user.name="github-actions" -c user.email="github-actions@users.noreply.github.com" commit -q -m "Version web, build n°${{ github.run_number }}"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" gh-pages
