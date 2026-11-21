@@ -324,6 +324,10 @@ details.help li { margin-bottom: 6px; }
       <!-- Onglet Plus -->
       <div class="tabpanel" data-panel="more" role="tabpanel" aria-labelledby="tab-more" hidden>
         <section class="card">
+          <h2 class="label">Fond de carte</h2>
+          <label class="switch"><span>Carte officielle du pays<small>Change de carte quand tu passes la frontière : IGN en France, ICGC en Catalogne, IGN Espagne, swisstopo, BKG, basemap.at, PDOK, Kartverket. OpenTopoMap ailleurs.</small></span><input type="checkbox" id="automap"></label>
+        </section>
+        <section class="card">
           <h2 class="label">Cartes hors ligne</h2>
           <p class="note" id="off-info">Aucune carte enregistrée sur cet appareil.</p>
           <label class="field"><span>Carte à enregistrer</span><select id="off-layer"></select></label>
@@ -332,7 +336,7 @@ details.help li { margin-bottom: 6px; }
             <button class="btn ghost" id="off-clear" type="button">Supprimer les cartes</button>
           </div>
           <p class="note" id="off-prog" hidden></p>
-          <p class="note">Possible avec les cartes IGN, ICGC et IGN Espagne (licences ouvertes), jusqu'au zoom 17. OpenStreetMap et OpenTopoMap interdisent le téléchargement.</p>
+          <p class="note">Possible avec les cartes officielles (licences ouvertes), jusqu'au zoom 17. OpenStreetMap et OpenTopoMap interdisent le téléchargement.</p>
         </section>
         <section class="card">
           <h2 class="label">Suivi</h2>
@@ -392,7 +396,7 @@ details.help li { margin-bottom: 6px; }
   const BROUTER = "https://brouter.de/brouter";
 
   /* ---------- état ---------- */
-  const state = { markers: [], profile: "hiking-mountain", loop: false, route: null, layer: "OpenTopoMap", name: "", pace: "moyen", keepOn: null };
+  const state = { markers: [], profile: "hiking-mountain", loop: false, route: null, layer: "OpenTopoMap", name: "", pace: "moyen", keepOn: null, autoMap: true, region: "" };
 
   function load() {
     try { return JSON.parse(localStorage.getItem(LS_KEY)) || {}; } catch { return {}; }
@@ -404,7 +408,7 @@ details.help li { margin-bottom: 6px; }
         names: state.markers.map((m) => m.placeName || ""),
         destFirst: destFirst && state.markers.length === 1,
         profile: state.profile, loop: state.loop, layer: state.layer, name: state.name,
-        pace: state.pace, keepOn: state.keepOn,
+        pace: state.pace, keepOn: state.keepOn, autoMap: state.autoMap, region: state.region,
       }));
     } catch { /* stockage indisponible : on continue sans */ }
   }
@@ -413,6 +417,8 @@ details.help li { margin-bottom: 6px; }
   state.loop = !!saved.loop;
   if (saved.pace && ["calme", "moyen", "sportif"].includes(saved.pace)) state.pace = saved.pace;
   if (typeof saved.keepOn === "boolean") state.keepOn = saved.keepOn;
+  if (saved.autoMap === false) state.autoMap = false;
+  if (typeof saved.region === "string") state.region = saved.region;
   if (saved.layer) state.layer = saved.layer;
 
   const today = new Date();
@@ -428,7 +434,10 @@ details.help li { margin-bottom: 6px; }
 
   /* ---------- tuiles hors ligne : stockage ---------- */
   // Seules les cartes sous licence ouverte peuvent être téléchargées à l'avance
-  const OFFLINE_LAYERS = ["IGN Plan (France)", "Satellite IGN (France)", "Topo Catalogne (ICGC)", "Topo Espagne (IGN-E)", "Satellite Espagne (PNOA)"];
+  const OFFLINE_LAYERS = [
+    "IGN Plan (France)", "Satellite IGN (France)", "Topo Catalogne (ICGC)", "Topo Espagne (IGN-E)", "Satellite Espagne (PNOA)",
+    "Topo Suisse (swisstopo)", "Topo Allemagne et Europe (BKG)", "Topo Autriche (basemap.at)", "Topo Pays-Bas (PDOK)", "Topo Norvège (Kartverket)",
+  ];
   const OFFLINE_MAX_ZOOM = 17;
   const tileDB = (() => {
     let p = null;
@@ -500,6 +509,11 @@ details.help li { margin-bottom: 6px; }
     "Satellite IGN (France)": makeLayer("Satellite IGN (France)", ign("ORTHOIMAGERY.ORTHOPHOTOS", "image/jpeg"), { maxZoom: 19, attribution: "© IGN" }),
     "Topo Catalogne (ICGC)": makeLayer("Topo Catalogne (ICGC)", "https://geoserveis.icgc.cat/servei/catalunya/mapa-base/wmts/topografic/MON3857NW/{z}/{x}/{y}.png", { maxZoom: 20, attribution: "© ICGC" }),
     "Topo Espagne (IGN-E)": makeLayer("Topo Espagne (IGN-E)", "https://www.ign.es/wmts/mapa-raster?service=WMTS&request=GetTile&version=1.0.0&Format=image/jpeg&layer=MTN&style=default&tilematrixset=GoogleMapsCompatible&TileMatrix={z}&TileRow={y}&TileCol={x}", { minZoom: 4, maxZoom: 18, attribution: "© IGN España" }),
+    "Topo Suisse (swisstopo)": makeLayer("Topo Suisse (swisstopo)", "https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.pixelkarte-farbe/default/current/3857/{z}/{x}/{y}.jpeg", { maxZoom: 19, attribution: "© swisstopo" }),
+    "Topo Allemagne et Europe (BKG)": makeLayer("Topo Allemagne et Europe (BKG)", "https://sgx.geodatenzentrum.de/wmts_topplus_open/tile/1.0.0/web/default/WEBMERCATOR/{z}/{y}/{x}.png", { maxZoom: 18, attribution: '© <a href="https://www.bkg.bund.de" target="_blank" rel="noopener">BKG</a> (2026) <a href="https://www.govdata.de/dl-de/by-2-0" target="_blank" rel="noopener">dl-de/by-2-0</a>' }),
+    "Topo Autriche (basemap.at)": makeLayer("Topo Autriche (basemap.at)", "https://mapsneu.wien.gv.at/basemap/geolandbasemap/normal/google3857/{z}/{y}/{x}.png", { maxZoom: 19, attribution: 'Datenquelle: <a href="https://basemap.at" target="_blank" rel="noopener">basemap.at</a>' }),
+    "Topo Pays-Bas (PDOK)": makeLayer("Topo Pays-Bas (PDOK)", "https://service.pdok.nl/brt/achtergrondkaart/wmts/v2_0/standaard/EPSG:3857/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© Kadaster / PDOK" }),
+    "Topo Norvège (Kartverket)": makeLayer("Topo Norvège (Kartverket)", "https://cache.kartverket.no/v1/wmts/1.0.0/topo/default/webmercator/{z}/{y}/{x}.png", { maxZoom: 18, attribution: "© Kartverket" }),
     "Satellite Espagne (PNOA)": makeLayer("Satellite Espagne (PNOA)", "https://www.ign.es/wmts/pnoa-ma?service=WMTS&request=GetTile&version=1.0.0&Format=image/png&layer=OI.OrthoimageCoverage&style=default&tilematrixset=GoogleMapsCompatible&TileMatrix={z}&TileRow={y}&TileCol={x}", { minZoom: 4, maxZoom: 19, attribution: "© IGN España, PNOA" }),
   };
   if (!layers[state.layer]) state.layer = "OpenTopoMap";
@@ -1837,6 +1851,58 @@ details.help li { margin-bottom: 6px; }
   }));
   syncPace();
   updateFollowBtn();
+
+
+  /* ---------- carte officielle selon le pays affiché ---------- */
+  /* REGION-MAP-START */
+  function layerForRegion(cc, sub) {
+    cc = String(cc || "").toLowerCase(); sub = String(sub || "").toUpperCase();
+    if (cc === "fr" || cc === "mc") return "IGN Plan (France)";
+    if (cc === "es") return sub === "ES-CT" ? "Topo Catalogne (ICGC)" : "Topo Espagne (IGN-E)";
+    if (cc === "ch" || cc === "li") return "Topo Suisse (swisstopo)";
+    if (cc === "at") return "Topo Autriche (basemap.at)";
+    if (cc === "nl") return "Topo Pays-Bas (PDOK)";
+    if (cc === "no") return "Topo Norvège (Kartverket)";
+    if (["de", "be", "lu", "dk", "cz", "pl"].includes(cc)) return "Topo Allemagne et Europe (BKG)";
+    return "OpenTopoMap";
+  }
+  /* REGION-MAP-END */
+  const region = { timer: null, last: null, busy: false };
+  function setBaseLayer(name) {
+    if (!layers[name] || state.layer === name) return;
+    map.removeLayer(layers[state.layer]);
+    map.addLayer(layers[name]);
+    state.layer = name; save();
+  }
+  async function checkRegion() {
+    if (!state.autoMap || region.busy || map.getZoom() < 7) return;
+    const c = map.getCenter();
+    if (region.last && region.last.distanceTo(c) < 20000) return; // pas assez bougé
+    region.busy = true;
+    try {
+      const res = await fetch("https://nominatim.openstreetmap.org/reverse?format=json&zoom=5&addressdetails=1&accept-language=fr&lat=" + c.lat.toFixed(4) + "&lon=" + c.lng.toFixed(4));
+      if (!res.ok) return;
+      const j = await res.json();
+      const a = (j && j.address) || {};
+      if (!a.country_code) return; // en mer ou hors pays
+      region.last = c;
+      const key = String(a.country_code).toLowerCase() + "|" + String(a["ISO3166-2-lvl4"] || "").toUpperCase();
+      const want = layerForRegion(a.country_code, a["ISO3166-2-lvl4"]);
+      const changed = key.split("|")[0] !== state.region.split("|")[0] || (key.startsWith("es|") && key !== state.region);
+      state.region = key; save();
+      // on ne change de carte qu'en changeant de pays (ou d'Espagne à la Catalogne) : un choix manuel reste respecté
+      if (changed && want !== state.layer) {
+        setBaseLayer(want);
+        setStatus("Carte adaptée au pays : " + want + ".");
+      }
+    } catch { /* hors ligne : on garde la carte actuelle */ } finally { region.busy = false; }
+  }
+  map.on("moveend", () => { clearTimeout(region.timer); region.timer = setTimeout(checkRegion, 1500); });
+  $("#automap").checked = state.autoMap;
+  $("#automap").addEventListener("change", (e) => {
+    state.autoMap = e.target.checked; save();
+    if (state.autoMap) { region.last = null; state.region = ""; checkRegion(); }
+  });
 
   /* ---------- reprise de la session précédente ---------- */
   if (Array.isArray(saved.pts) && saved.pts.length) {
