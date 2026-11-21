@@ -228,6 +228,17 @@ details.help li { margin-bottom: 6px; }
   .stat { padding: 0 6px; }
   #prof { height: 100px; }
   .card { padding: 12px; gap: 10px; }
+  /* pendant le suivi : la carte prend tout l'écran au-dessus des boutons */
+  .following .app { grid-template-rows: minmax(0, 1fr) auto; }
+  .following .topbar, .following .scroll { display: none; }
+  .following .actionbar { padding-top: 8px; gap: 6px; }
+  .following #status { min-height: 0; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+  #hud { left: 8px; right: 8px; bottom: 30px; padding: 9px 12px; gap: 7px; border-radius: 12px; }
+  .hud-row b { font-size: 22px; }
+  .hud-row + .hud-row { padding-top: 6px; }
+  .hud-row + .hud-row b { font-size: 17px; }
+  .hud-row span { font-size: 10px; }
+  #hud .btn { padding: 6px 10px; font-size: 13px; }
 }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; transition: none !important; } }
 </style>
@@ -1167,7 +1178,7 @@ details.help li { margin-bottom: 6px; }
   /* REC-ADD-END */
 
   const fmtKm = (m) => (m >= 1000 ? (m / 1000).toFixed(1).replace(".", ",") + " km" : Math.round(m / 10) * 10 + " m");
-  const fmtHM = (ms) => { const m = Math.floor(ms / 60000); return Math.floor(m / 60) + " h " + String(m % 60).padStart(2, "0"); };
+  const fmtHM = (ms) => { const m = Math.max(0, Math.floor(ms / 60000)); return m < 60 ? m + " min" : Math.floor(m / 60) + " h " + String(m % 60).padStart(2, "0"); };
 
   function renderRecHud() {
     if (!rec) return;
@@ -1275,6 +1286,7 @@ details.help li { margin-bottom: 6px; }
     else say("Enregistrement démarré.");
     recStart();
     document.body.classList.add("following");
+    setTimeout(() => map.invalidateSize(), 60);
     state.markers.forEach((m) => { if (m.dragging) m.dragging.disable(); });
     $("#hud").hidden = false; $("#hud-off").hidden = true; $("#h-recenter").hidden = true;
     $("#h-route").hidden = !nav.withRoute;
@@ -1287,7 +1299,7 @@ details.help li { margin-bottom: 6px; }
     if (wantKeepOn()) keepAwake(true);
 
     if (BG) {
-      setStatus((nav.withRoute ? "Suivi en cours." : "Enregistrement en cours.") + " Tu peux éteindre l'écran : une notification reste affichée.");
+      setStatus((nav.withRoute ? "Suivi en cours." : "Enregistrement en cours.") + " Écran éteint possible.");
       try { const LN = plug("LocalNotifications"); if (LN) await LN.requestPermissions(); } catch { /* la notification peut rester masquée, le suivi continue */ }
       if (!nav.on) return;
       try {
@@ -1335,6 +1347,7 @@ details.help li { margin-bottom: 6px; }
     nav.id = null; nav.on = false; nav.kind = null;
     keepAwake(false);
     document.body.classList.remove("following");
+    setTimeout(() => map.invalidateSize(), 60);
     state.markers.forEach((m) => { if (m.dragging) m.dragging.enable(); });
     if (meDot) { map.removeLayer(meDot); meDot = null; }
     if (meAcc) { map.removeLayer(meAcc); meAcc = null; }
