@@ -25,6 +25,8 @@
   --trace-ink: #ffffff;
   --danger: #b42318;
   --danger-soft: #fdecea;
+  --warn-bg: #fff4e5;
+  --warn-ink: #7a4100;
   --shadow: 0 1px 2px rgba(20, 36, 28, .06), 0 4px 14px rgba(20, 36, 28, .06);
   --f-display: "Barlow Condensed", "Arial Narrow", sans-serif;
   --f-body: "Barlow", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -34,7 +36,7 @@
   :root:not([data-theme="light"]) {
     --bg: #0e1612; --surface: #15201a; --sunken: #101a15; --ink: #e5ede7; --muted: #97aa9e;
     --line: #26362d; --forest: #5cbf93; --forest-ink: #07140e; --forest-soft: #1a2e24;
-    --trace: #ff7a30; --trace-ink: #1a0b02; --danger: #ff8f83; --danger-soft: #3a1714;
+    --trace: #ff7a30; --trace-ink: #1a0b02; --danger: #ff8f83; --danger-soft: #3a1714; --warn-bg: #3a2a0c; --warn-ink: #ffcf7a;
     --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 4px 14px rgba(0, 0, 0, .25);
     color-scheme: dark;
   }
@@ -42,7 +44,7 @@
 :root[data-theme="dark"] {
   --bg: #0e1612; --surface: #15201a; --sunken: #101a15; --ink: #e5ede7; --muted: #97aa9e;
   --line: #26362d; --forest: #5cbf93; --forest-ink: #07140e; --forest-soft: #1a2e24;
-  --trace: #ff7a30; --trace-ink: #1a0b02; --danger: #ff8f83; --danger-soft: #3a1714;
+  --trace: #ff7a30; --trace-ink: #1a0b02; --danger: #ff8f83; --danger-soft: #3a1714; --warn-bg: #3a2a0c; --warn-ink: #ffcf7a;
   --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 4px 14px rgba(0, 0, 0, .25);
   color-scheme: dark;
 }
@@ -160,6 +162,28 @@ select { width: 100%; padding: 9px 10px; border: 1px solid var(--line); backgrou
 #hikes .open small { color: var(--muted); font-variant-numeric: tabular-nums; }
 #hikes .del { border: 1px solid var(--line); background: var(--surface); border-radius: 10px; padding: 0 12px; color: var(--muted); }
 
+/* météo */
+input[type="datetime-local"] { width: 100%; padding: 8px 10px; border: 1px solid var(--line); background: var(--surface); border-radius: 9px; font-variant-numeric: tabular-nums; }
+#wx-alerts { display: flex; flex-direction: column; gap: 6px; }
+#wx-alerts:empty { display: none; }
+.wx-alert { margin: 0; padding: 7px 10px; border-radius: 8px; font-size: 13.5px; font-weight: 600; border-left: 3px solid; }
+.wx-alert.ok { background: var(--forest-soft); border-color: var(--forest); }
+.wx-alert.warn { background: var(--warn-bg); color: var(--warn-ink); border-color: #e08a00; }
+.wx-alert.danger { background: var(--danger-soft); color: var(--danger); border-color: var(--danger); }
+.wx-alert.info { background: var(--sunken); color: var(--muted); border-color: var(--line); }
+#wx-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; }
+#wx-list:empty { display: none; }
+#wx-list li { display: grid; grid-template-columns: 3.2em 3.8em 3.4em 1fr auto; gap: 8px; align-items: baseline; padding: 6px 0; border-top: 1px solid var(--line); font-size: 13.5px; font-variant-numeric: tabular-nums; }
+#wx-list li:first-child { border-top: 0; }
+#wx-list li span:first-child { font-weight: 600; }
+#wx-list li span:nth-child(2), #wx-list li span:nth-child(5) { color: var(--muted); }
+#wx-list li span:nth-child(3) { font-weight: 600; }
+#wx-list li span:nth-child(4) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#wx-list .bad { color: var(--danger); font-weight: 600; }
+#poi-info:empty { display: none; }
+.poi span { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 6px; color: #fff; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.4); font: 700 12px/1 var(--f-body); }
+#hud .row-btns .btn { flex: 1; }
+
 details.help summary { cursor: pointer; font-weight: 600; }
 details.help ol { margin: 10px 0 0; padding-left: 20px; color: var(--muted); font-size: 14px; }
 details.help li { margin-bottom: 6px; }
@@ -276,6 +300,18 @@ details.help li { margin-bottom: 6px; }
             <canvas id="prof" aria-label="Profil altimétrique"></canvas>
             <figcaption id="hover">Survole le profil pour suivre la position sur la carte.</figcaption>
           </figure>
+          <p class="note" id="poi-info"></p>
+        </section>
+
+        <section class="card" id="wx-card">
+          <div class="card-head">
+            <h2 class="label">Météo sur le parcours</h2>
+            <button class="btn accent" id="wx-go" type="button" disabled>Prévoir</button>
+          </div>
+          <label class="field"><span>Départ prévu</span><input type="datetime-local" id="wx-start"></label>
+          <div id="wx-alerts"></div>
+          <ol id="wx-list"></ol>
+          <p class="note" id="wx-note">Calcule un itinéraire, choisis l'heure de départ, puis touche « Prévoir ».</p>
         </section>
 
         <section class="card route-edit">
@@ -341,6 +377,12 @@ details.help li { margin-bottom: 6px; }
         <section class="card">
           <h2 class="label">Suivi</h2>
           <label class="switch"><span>Garder l'écran allumé<small>Dans l'app, le suivi continue écran éteint grâce à la notification.</small></span><input type="checkbox" id="keepon"></label>
+          <label class="switch"><span>Annonces vocales<small>Hors itinéraire, retour sur le tracé, arrivée dans 1 km et 500 m.</small></span><input type="checkbox" id="voice"></label>
+        </section>
+        <section class="card">
+          <h2 class="label">Sécurité</h2>
+          <p class="note">Envoie ta position à un proche par SMS, WhatsApp ou e-mail, avec un lien vers la carte. Aussi disponible pendant le suivi.</p>
+          <div class="row-btns"><button class="btn accent" id="share-pos" type="button">Envoyer ma position</button></div>
         </section>
         <section class="card">
           <details class="help">
@@ -380,7 +422,10 @@ details.help li { margin-bottom: 6px; }
         <div><b id="h-time">—</b><span>Durée</span></div>
         <div><b id="h-upd">—</b><span>D+ fait</span></div>
       </div>
-      <button class="btn" id="h-recenter" type="button" hidden>Recentrer sur ma position</button>
+      <div class="row-btns">
+        <button class="btn" id="h-recenter" type="button" hidden>Recentrer</button>
+        <button class="btn" id="h-share" type="button">Envoyer ma position</button>
+      </div>
     </div>
   </div>
 </main>
@@ -396,7 +441,7 @@ details.help li { margin-bottom: 6px; }
   const BROUTER = "https://brouter.de/brouter";
 
   /* ---------- état ---------- */
-  const state = { markers: [], profile: "hiking-mountain", loop: false, route: null, layer: "OpenTopoMap", name: "", pace: "moyen", keepOn: null, autoMap: true, region: "" };
+  const state = { markers: [], profile: "hiking-mountain", loop: false, route: null, layer: "OpenTopoMap", name: "", pace: "moyen", keepOn: null, autoMap: true, region: "", voice: true, overlays: null };
 
   function load() {
     try { return JSON.parse(localStorage.getItem(LS_KEY)) || {}; } catch { return {}; }
@@ -409,6 +454,7 @@ details.help li { margin-bottom: 6px; }
         destFirst: destFirst && state.markers.length === 1,
         profile: state.profile, loop: state.loop, layer: state.layer, name: state.name,
         pace: state.pace, keepOn: state.keepOn, autoMap: state.autoMap, region: state.region,
+        voice: state.voice, overlays: state.overlays,
       }));
     } catch { /* stockage indisponible : on continue sans */ }
   }
@@ -418,6 +464,8 @@ details.help li { margin-bottom: 6px; }
   if (saved.pace && ["calme", "moyen", "sportif"].includes(saved.pace)) state.pace = saved.pace;
   if (typeof saved.keepOn === "boolean") state.keepOn = saved.keepOn;
   if (saved.autoMap === false) state.autoMap = false;
+  if (saved.voice === false) state.voice = false;
+  if (Array.isArray(saved.overlays)) state.overlays = saved.overlays;
   if (typeof saved.region === "string") state.region = saved.region;
   if (saved.layer) state.layer = saved.layer;
 
@@ -519,7 +567,15 @@ details.help li { margin-bottom: 6px; }
   if (!layers[state.layer]) state.layer = "OpenTopoMap";
 
   const map = L.map("map", { zoomControl: true, layers: [layers[state.layer]] }).setView([46.6, 2.5], 6);
-  const layerControl = L.control.layers(layers, null, { position: "topright" }).addTo(map);
+  // couches superposables : pentes raides (France, Suisse) et points utiles près du tracé
+  const slopeLayer = L.layerGroup([
+    L.tileLayer(ign("GEOGRAPHICALGRIDSYSTEMS.SLOPES.MOUNTAIN", "image/png"), { maxNativeZoom: 17, maxZoom: 20, opacity: 0.55, attribution: "Pentes © IGN" }),
+    L.tileLayer("https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.hangneigung-ueber_30/default/current/3857/{z}/{x}/{y}.png", { maxZoom: 20, opacity: 0.6, attribution: "Pentes © swisstopo" }),
+  ]);
+  const poiLayer = L.layerGroup();
+  const overlays = { "Pentes > 30° (France, Suisse)": slopeLayer, "Points utiles (eau, refuges, sommets)": poiLayer };
+  (Array.isArray(state.overlays) ? state.overlays : ["Points utiles (eau, refuges, sommets)"]).forEach((k) => { if (overlays[k]) overlays[k].addTo(map); });
+  const layerControl = L.control.layers(layers, overlays, { position: "topright" }).addTo(map);
   L.control.scale({ metric: true, imperial: false }).addTo(map);
   map.on("baselayerchange", (e) => { state.layer = e.name; save(); });
 
@@ -657,6 +713,8 @@ details.help li { margin-bottom: 6px; }
     showStats(null);
     $("#gpx").disabled = true; $("#save").disabled = true; updateFollowBtn(); renderOffInfo();
     drawProfile();
+    weatherRouteChanged();
+    poiLayer.clearLayers(); $("#poi-info").textContent = "";
   }
 
   /* ---------- statistiques ---------- */
@@ -721,6 +779,7 @@ details.help li { margin-bottom: 6px; }
     if (firstFit || !hadRoute) { map.fitBounds(trace.getBounds(), { padding: [40, 40] }); firstFit = false; }
     showStats(r);
     $("#gpx").disabled = false; $("#save").disabled = false; updateFollowBtn(); renderOffInfo();
+    weatherRouteChanged(); loadPoi();
     drawProfile();
   }
 
@@ -853,6 +912,7 @@ details.help li { margin-bottom: 6px; }
       const p = m.getLatLng();
       x += '  <wpt lat="' + p.lat.toFixed(6) + '" lon="' + p.lng.toFixed(6) + '"><name>' + esc(m.placeName || pointName(i, n)) + "</name></wpt>\n";
     });
+    x += gpxPoiWpts();
     x += "  <trk>\n    <name>" + name + "</name>\n    <trkseg>\n";
     cleanTrack(r.coords).forEach((c) => {
       x += '      <trkpt lat="' + c[1].toFixed(6) + '" lon="' + c[0].toFixed(6) + '"><ele>' + (c[2] == null ? 0 : Number(c[2]).toFixed(1)) + "</ele></trkpt>\n";
@@ -1142,6 +1202,9 @@ details.help li { margin-bottom: 6px; }
     if (nav.startAlong == null) { nav.startAlong = loc.along; nav.startUp = r.cumUp[loc.i]; }
 
     const remain = Math.max(0, r.dist - loc.along);
+    if (r.dist > 1500) [1000, 500].forEach((t) => {
+      if (remain <= t && remain > 30 && !nav.said[t]) { nav.said[t] = true; say("Arrivée dans " + spokenKm(t) + "."); }
+    });
     const upLeft = Math.max(0, r.up - r.cumUp[loc.i]);
     // heure d'arrivée : rythme choisi, corrigé par ta vitesse réelle après 10 min de marche
     let factor = 1;
@@ -1161,16 +1224,19 @@ details.help li { margin-bottom: 6px; }
     if (remain < 25 && loc.i >= r.coords.length - 40) {
       nav.off = 0;
       banner.hidden = false; banner.className = "ok"; banner.textContent = "Arrivée atteinte";
-      if (!nav.arrived) { nav.arrived = true; buzz([400, 200, 400, 200, 400]); }
+      if (!nav.arrived) { nav.arrived = true; buzz([400, 200, 400, 200, 400]); say("Arrivée atteinte. Bravo !"); }
     } else if (loc.d > limit) {
       nav.off++;
       if (nav.off >= 2) { // deux positions de suite hors tracé, pour ignorer un saut de GPS isolé
         banner.hidden = false; banner.className = "warn";
         banner.textContent = "Hors itinéraire : " + Math.round(loc.d) + " m du tracé";
         if (Date.now() - nav.lastBuzz > 30000) { nav.lastBuzz = Date.now(); buzz([300, 150, 300]); }
+        if (!nav.wasOff || Date.now() - nav.lastSay > 120000) { nav.lastSay = Date.now(); say("Attention, tu t'éloignes de l'itinéraire : " + spokenKm(loc.d) + "."); }
+        nav.wasOff = true;
       }
     } else {
       nav.off = 0; banner.hidden = true;
+      if (nav.wasOff) { nav.wasOff = false; say("De retour sur l'itinéraire."); }
     }
     if (!document.hidden) drawProfile();
   }
@@ -1204,7 +1270,9 @@ details.help li { margin-bottom: 6px; }
     }
     const BG = plug("BackgroundGeolocation"), G = nativeGeo();
     if (!BG && !G && !navigator.geolocation) { setStatus("Localisation indisponible sur cet appareil.", true); return; }
-    Object.assign(nav, { on: true, withRoute: !!state.route, first: true, follow: true, off: 0, arrived: false, lastBuzz: 0, startAlong: null, startUp: 0, lastIdx: 0 });
+    Object.assign(nav, { on: true, withRoute: !!state.route, first: true, follow: true, off: 0, arrived: false, lastBuzz: 0, startAlong: null, startUp: 0, lastIdx: 0, said: {}, wasOff: false, lastSay: 0 });
+    if (nav.withRoute) say("Suivi démarré. " + spokenKm(state.route.dist) + ", " + Math.round(state.route.up) + " mètres de montée.");
+    else say("Enregistrement démarré.");
     recStart();
     document.body.classList.add("following");
     state.markers.forEach((m) => { if (m.dragging) m.dragging.disable(); });
@@ -1852,6 +1920,267 @@ details.help li { margin-bottom: 6px; }
   syncPace();
   updateFollowBtn();
 
+
+  /* ---------- météo sur le parcours (Open-Meteo) ---------- */
+  /* WX-START */
+  function wxLabel(c) {
+    if (c === 0) return "Ciel clair";
+    if (c <= 2) return "Éclaircies";
+    if (c === 3) return "Couvert";
+    if (c <= 48) return "Brouillard";
+    if (c <= 57) return "Bruine";
+    if (c <= 67) return "Pluie";
+    if (c <= 77) return "Neige";
+    if (c <= 82) return "Averses";
+    if (c <= 86) return "Averses de neige";
+    return "Orage";
+  }
+  // points d'échantillonnage le long du tracé (au plus 8), avec l'heure de passage prévue
+  function wxSamples(r, startMs) {
+    const n = Math.min(8, Math.max(2, Math.ceil(r.dist / 1500) + 1));
+    const out = [];
+    for (let k = 0; k < n; k++) {
+      const target = (r.dist * k) / (n - 1);
+      let i = 0;
+      while (i < r.cum.length - 1 && r.cum[i] < target) i++;
+      const c = r.coords[i];
+      out.push({ i, lat: c[1], lng: c[0], km: r.cum[i] / 1000, eta: startMs + hoursFor(r.cum[i], r.cumUp[i]) * 3600000 });
+    }
+    return out;
+  }
+  // pour chaque point, l'heure prévue la plus proche du passage
+  function wxPick(samples, data) {
+    const list = Array.isArray(data) ? data : [data];
+    return samples.map((s, k) => {
+      const h = list[k] && list[k].hourly;
+      if (!h || !h.time || !h.time.length) return Object.assign({ none: true }, s);
+      const t = s.eta / 1000;
+      if (t > h.time[h.time.length - 1] + 3600) return Object.assign({ none: true }, s);
+      let j = 0, best = Infinity;
+      h.time.forEach((v, idx) => { const d = Math.abs(v - t); if (d < best) { best = d; j = idx; } });
+      return Object.assign({}, s, {
+        temp: h.temperature_2m[j], prob: h.precipitation_probability[j], mm: h.precipitation[j],
+        wind: h.wind_speed_10m[j], gust: h.wind_gusts_10m[j], code: h.weather_code[j],
+      });
+    });
+  }
+  function wxAlerts(rows) {
+    const a = [];
+    const ok = rows.filter((r) => !r.none);
+    const storm = ok.find((r) => r.code >= 95);
+    if (storm) a.push({ lvl: "danger", txt: "Orage prévu vers " + new Date(storm.eta).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) + " (km " + storm.km.toFixed(1).replace(".", ",") + ")." });
+    const rain = ok.filter((r) => r.prob >= 60 || r.mm >= 1);
+    if (rain.length) a.push({ lvl: "warn", txt: "Pluie probable sur " + rain.length + " des " + ok.length + " points du parcours." });
+    const gust = ok.reduce((m, r) => Math.max(m, r.gust || 0), 0);
+    if (gust >= 60) a.push({ lvl: gust >= 80 ? "danger" : "warn", txt: "Rafales jusqu'à " + Math.round(gust) + " km/h." });
+    const tmin = Math.min(...ok.map((r) => r.temp)), tmax = Math.max(...ok.map((r) => r.temp));
+    if (ok.length && tmin <= 0) a.push({ lvl: "warn", txt: "Gel possible : jusqu'à " + Math.round(tmin) + " °C." });
+    if (ok.length && tmax >= 30) a.push({ lvl: "warn", txt: "Forte chaleur : jusqu'à " + Math.round(tmax) + " °C. Prévois de l'eau." });
+    if (ok.length && !a.length) a.push({ lvl: "ok", txt: "Pas de pluie, d'orage ni de vent fort prévus sur le parcours." });
+    if (ok.length < rows.length) a.push({ lvl: "info", txt: "Une partie du parcours tombe au-delà des prévisions disponibles (16 jours)." });
+    return a;
+  }
+  /* WX-END */
+
+  const wx = { shown: false, timer: null, ctrl: null };
+  function wxDefaultStart() {
+    const d = new Date(Date.now() + 15 * 60000);
+    d.setMinutes(Math.ceil(d.getMinutes() / 15) * 15, 0, 0);
+    const p = (n) => String(n).padStart(2, "0");
+    return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + "T" + p(d.getHours()) + ":" + p(d.getMinutes());
+  }
+  $("#wx-start").value = wxDefaultStart();
+
+  async function runWeather() {
+    const r = state.route;
+    if (!r) return;
+    const start = new Date($("#wx-start").value);
+    const startMs = isNaN(start) ? Date.now() : start.getTime();
+    const samples = wxSamples(r, startMs);
+    $("#wx-go").disabled = true;
+    $("#wx-note").textContent = "Chargement des prévisions…";
+    if (wx.ctrl) wx.ctrl.abort();
+    wx.ctrl = new AbortController();
+    try {
+      const url = "https://api.open-meteo.com/v1/forecast?latitude=" + samples.map((s) => s.lat.toFixed(4)).join(",") +
+        "&longitude=" + samples.map((s) => s.lng.toFixed(4)).join(",") +
+        "&hourly=temperature_2m,precipitation_probability,precipitation,wind_speed_10m,wind_gusts_10m,weather_code" +
+        "&timeformat=unixtime&timezone=GMT&forecast_days=16";
+      const res = await fetch(url, { signal: wx.ctrl.signal });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const rows = wxPick(samples, await res.json());
+      renderWeather(rows);
+      wx.shown = true;
+      $("#wx-note").textContent = "Prévisions Open-Meteo à l'heure de passage estimée (rythme « " + $('#pace-seg [aria-pressed="true"]').firstChild.textContent + " »).";
+    } catch (e) {
+      if (e.name === "AbortError") return;
+      $("#wx-note").textContent = "Météo indisponible pour le moment (" + ((e && e.message) || "réseau") + ").";
+    } finally {
+      $("#wx-go").disabled = !state.route;
+    }
+  }
+  function renderWeather(rows) {
+    const al = $("#wx-alerts"); al.textContent = "";
+    wxAlerts(rows).forEach((a) => { const p = document.createElement("p"); p.className = "wx-alert " + a.lvl; p.textContent = a.txt; al.append(p); });
+    const ol = $("#wx-list"); ol.textContent = "";
+    rows.forEach((r) => {
+      const li = document.createElement("li");
+      const hh = new Date(r.eta).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+      const cells = r.none
+        ? [hh, "km " + r.km.toFixed(1).replace(".", ","), "—", "hors prévisions", ""]
+        : [hh, "km " + r.km.toFixed(1).replace(".", ","), Math.round(r.temp) + " °C", wxLabel(r.code) + (r.prob >= 20 ? " · " + r.prob + " %" : ""), Math.round(r.wind) + (r.gust >= 40 ? "–" + Math.round(r.gust) : "") + " km/h"];
+      cells.forEach((t, k) => { const s = document.createElement("span"); s.textContent = t; if (k === 3 && !r.none && (r.prob >= 60 || r.code >= 95)) s.className = "bad"; li.append(s); });
+      ol.append(li);
+    });
+  }
+  function weatherRouteChanged() {
+    $("#wx-go").disabled = !state.route;
+    if (!state.route) { $("#wx-alerts").textContent = ""; $("#wx-list").textContent = ""; wx.shown = false; $("#wx-note").textContent = "Calcule un itinéraire, choisis l'heure de départ, puis touche « Prévoir »."; return; }
+    if (wx.shown) { clearTimeout(wx.timer); wx.timer = setTimeout(runWeather, 800); }
+  }
+  $("#wx-go").addEventListener("click", runWeather);
+  $("#wx-start").addEventListener("change", () => { if (wx.shown) runWeather(); });
+  $("#pace").addEventListener("change", () => { if (wx.shown) runWeather(); });
+
+  /* ---------- points utiles près du tracé (OpenStreetMap, Overpass) ---------- */
+  const POI_TYPES = {
+    eau: { letter: "E", color: "#1c6fd1", label: "Eau potable", gpx: "Drinking Water" },
+    source: { letter: "S", color: "#2a8fbd", label: "Source", gpx: "Drinking Water" },
+    refuge: { letter: "R", color: "#8a4b16", label: "Refuge", gpx: "Lodge" },
+    abri: { letter: "A", color: "#7a6a2b", label: "Abri", gpx: "Shelter" },
+    sommet: { letter: "▲", color: "#4b3b8f", label: "Sommet", gpx: "Summit" },
+    parking: { letter: "P", color: "#3d5a73", label: "Parking", gpx: "Parking Area" },
+  };
+  /* POI-START */
+  function poiKind(t) {
+    if (t.amenity === "drinking_water") return "eau";
+    if (t.natural === "spring") return "source";
+    if (t.tourism === "alpine_hut" || t.tourism === "wilderness_hut") return "refuge";
+    if (t.amenity === "shelter") return "abri";
+    if (t.natural === "peak") return "sommet";
+    if (t.amenity === "parking") return "parking";
+    return null;
+  }
+  const POI_MAX_DIST = { eau: 250, source: 250, refuge: 400, abri: 200, sommet: 300, parking: 200 };
+  function poiNearRoute(r, elements) {
+    const out = [];
+    const seen = new Set();
+    elements.forEach((el) => {
+      const lat = el.lat != null ? el.lat : el.center && el.center.lat;
+      const lng = el.lon != null ? el.lon : el.center && el.center.lon;
+      const t = el.tags || {};
+      const kind = poiKind(t);
+      if (!kind || lat == null || lng == null) return;
+      const near = nearestOnRoute(r, lat, lng, 0, r.coords.length - 2);
+      if (near.d > POI_MAX_DIST[kind]) return;
+      const k = kind + Math.round(lat * 2000) + "," + Math.round(lng * 2000);
+      if (seen.has(k)) return;
+      seen.add(k);
+      out.push({ kind, lat, lng, name: t.name || "", ele: t.ele || "", d: near.d, along: near.along });
+    });
+    return out.sort((a, b) => a.along - b.along);
+  }
+  /* POI-END */
+  map.createPane("poi");
+  map.getPane("poi").style.zIndex = 450;
+  const poi = { key: "", list: [], ctrl: null };
+  function poiIcon(kind) {
+    const T = POI_TYPES[kind];
+    return L.divIcon({ className: "poi", html: '<span style="background:' + T.color + '">' + T.letter + "</span>", iconSize: [22, 22], iconAnchor: [11, 11] });
+  }
+  async function loadPoi() {
+    const r = state.route;
+    poiLayer.clearLayers();
+    if (!r || !map.hasLayer(poiLayer)) return;
+    const key = r.coords.length + ":" + r.coords[0].join(",") + ":" + r.coords[r.coords.length - 1].join(",");
+    if (key !== poi.key) {
+      let s = 90, w = 180, n = -90, e = -180;
+      r.coords.forEach((c) => { s = Math.min(s, c[1]); n = Math.max(n, c[1]); w = Math.min(w, c[0]); e = Math.max(e, c[0]); });
+      const pad = 0.006, bb = [s - pad, w - pad, n + pad, e + pad].map((v) => v.toFixed(5)).join(",");
+      if ((n - s) * (e - w) > 1.5) { setStatus("Itinéraire trop étendu pour chercher les points utiles."); return; }
+      const q = "[out:json][timeout:25];(" +
+        'node["amenity"="drinking_water"](' + bb + ");" + 'node["natural"="spring"](' + bb + ");" +
+        'nwr["tourism"~"^(alpine_hut|wilderness_hut)$"](' + bb + ");" + 'node["amenity"="shelter"](' + bb + ");" +
+        'node["natural"="peak"]["name"](' + bb + ");" + 'nwr["amenity"="parking"]["access"!="private"](' + bb + ");" +
+        ");out center tags 400;";
+      if (poi.ctrl) poi.ctrl.abort();
+      poi.ctrl = new AbortController();
+      try {
+        const res = await fetch("https://overpass-api.de/api/interpreter", { method: "POST", body: "data=" + encodeURIComponent(q), headers: { "Content-Type": "application/x-www-form-urlencoded" }, signal: poi.ctrl.signal });
+        if (res.status === 429) { setStatus("Points utiles : serveur occupé, réessaie dans une minute."); return; }
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        const j = await res.json();
+        if (state.route !== r) return;
+        poi.list = poiNearRoute(r, j.elements || []);
+        poi.key = key;
+      } catch (err) {
+        if (err.name !== "AbortError") setStatus("Points utiles indisponibles pour le moment.");
+        return;
+      }
+    }
+    poi.list.forEach((p) => {
+      const T = POI_TYPES[p.kind];
+      const txt = T.label + (p.name ? " : " + p.name : "") + (p.ele ? " (" + p.ele + " m)" : "") + " · km " + (p.along / 1000).toFixed(1).replace(".", ",") + (p.d > 40 ? ", à " + Math.round(p.d / 10) * 10 + " m du tracé" : "");
+      L.marker([p.lat, p.lng], { icon: poiIcon(p.kind), pane: "poi", keyboard: false }).bindTooltip(txt, { direction: "top", offset: [0, -10] }).addTo(poiLayer);
+    });
+    const cnt = (ks) => poi.list.filter((p) => ks.includes(p.kind)).length;
+    const parts = [[cnt(["eau", "source"]), "point d'eau", "points d'eau"], [cnt(["refuge", "abri"]), "refuge ou abri", "refuges ou abris"], [cnt(["sommet"]), "sommet", "sommets"], [cnt(["parking"]), "parking", "parkings"]]
+      .filter((x) => x[0]).map((x) => x[0] + " " + (x[0] > 1 ? x[2] : x[1]));
+    $("#poi-info").textContent = poi.list.length
+      ? "Près du tracé : " + parts.join(", ") + ". Ils sont ajoutés au GPX (sauf parkings)."
+      : "Aucun point d'eau, refuge, sommet ou parking répertorié près du tracé.";
+  }
+  map.on("overlayadd", (e) => { if (e.layer === poiLayer) loadPoi(); state.overlays = overlayState(); save(); });
+  map.on("overlayremove", () => { state.overlays = overlayState(); save(); });
+  function overlayState() { return Object.keys(overlays).filter((k) => map.hasLayer(overlays[k])); }
+  function gpxPoiWpts() {
+    if (!map.hasLayer(poiLayer)) return "";
+    return poi.list.filter((p) => p.kind !== "parking").map((p) => {
+      const T = POI_TYPES[p.kind];
+      return '  <wpt lat="' + p.lat.toFixed(6) + '" lon="' + p.lng.toFixed(6) + '"><name>' + esc((T.label + (p.name ? " " + p.name : "")).slice(0, 30)) + "</name><sym>" + T.gpx + "</sym><type>" + esc(T.label) + "</type></wpt>\n";
+    }).join("");
+  }
+
+  /* ---------- annonces vocales ---------- */
+  function say(text) {
+    if (!state.voice) return;
+    const T = plug("TextToSpeech");
+    if (T) { T.speak({ text, lang: "fr-FR", rate: 1.0, pitch: 1.0, volume: 1.0, category: "playback" }).catch(() => {}); return; }
+    try {
+      if (!window.speechSynthesis) return;
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = "fr-FR";
+      window.speechSynthesis.speak(u);
+    } catch { /* synthèse vocale indisponible */ }
+  }
+  const spokenKm = (m) => (m >= 1000 ? (Math.round(m / 100) / 10).toString().replace(".", ",") + " kilomètres" : Math.round(m / 10) * 10 + " mètres");
+  $("#voice").checked = state.voice;
+  $("#voice").addEventListener("change", (e) => { state.voice = e.target.checked; save(); if (state.voice) say("Annonces vocales activées."); });
+
+  /* ---------- envoyer ma position ---------- */
+  async function sharePosition() {
+    let lat, lng, acc;
+    if (meDot) { const ll = meDot.getLatLng(); lat = ll.lat; lng = ll.lng; acc = meAcc ? meAcc.getRadius() : 0; }
+    else {
+      setStatus("Recherche de ta position…");
+      try { const p = await getPosition(); lat = p.coords.latitude; lng = p.coords.longitude; acc = p.coords.accuracy || 0; }
+      catch (e) { setStatus(locError(e), true); return; }
+    }
+    const hh = new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+    let text = "Ma position à " + hh + " (précision ± " + Math.round(acc) + " m) : https://www.google.com/maps?q=" + lat.toFixed(5) + "," + lng.toFixed(5);
+    if (nav.on && nav.withRoute && $("#h-rest").textContent !== "—") text += "\nIl me reste " + $("#h-rest").textContent + ", arrivée prévue vers " + $("#h-eta").textContent + ".";
+    const S = plug("Share");
+    try {
+      if (S) { await S.share({ title: "Ma position", text, dialogTitle: "Envoyer ma position" }); return; }
+      if (navigator.share) { await navigator.share({ title: "Ma position", text }); return; }
+      await navigator.clipboard.writeText(text);
+      setStatus("Position copiée : colle-la dans un message.");
+    } catch (e) {
+      if (!/cancel|abort/i.test(String((e && (e.name || e.message)) || e))) setStatus("Partage impossible : " + ((e && e.message) || e), true);
+    }
+  }
+  $("#h-share").addEventListener("click", sharePosition);
+  $("#share-pos").addEventListener("click", sharePosition);
 
   /* ---------- carte officielle selon le pays affiché ---------- */
   /* REGION-MAP-START */
