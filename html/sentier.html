@@ -306,6 +306,8 @@ details.help li { margin-bottom: 6px; }
     try {
       localStorage.setItem(LS_KEY, JSON.stringify({
         pts: state.markers.map((m) => [m.getLatLng().lat, m.getLatLng().lng]),
+        names: state.markers.map((m) => m.placeName || ""),
+        destFirst: destFirst && state.markers.length === 1,
         profile: state.profile, loop: state.loop, layer: state.layer, name: state.name,
       }));
     } catch { /* stockage indisponible : on continue sans */ }
@@ -348,18 +350,25 @@ details.help li { margin-bottom: 6px; }
     return L.divIcon({ className: "pin" + (end ? " end" : ""), html: "<span>" + label + "</span>", iconSize: [28, 28], iconAnchor: [14, 14] });
   }
 
+  // vrai quand la destination cherchée a été posée avant le départ
+  let destFirst = false;
+  function isEndAt(i, n) {
+    return (!state.loop && n >= 2 && i === n - 1) || (destFirst && n === 1);
+  }
+
   function refreshMarkers() {
     const n = state.markers.length;
+    if (n !== 1) destFirst = false;
     state.markers.forEach((m, i) => {
-      const isEnd = !state.loop && n >= 2 && i === n - 1;
-      m.setIcon(pinIcon(i === 0 ? "D" : isEnd ? "A" : String(i), isEnd));
+      const isEnd = isEndAt(i, n);
+      m.setIcon(pinIcon(isEnd ? "A" : i === 0 ? "D" : String(i), isEnd));
     });
     renderPoints();
   }
 
   function pointName(i, n) {
+    if (isEndAt(i, n)) return "Arrivée";
     if (i === 0) return "Départ";
-    if (!state.loop && i === n - 1) return "Arrivée";
     return "Étape " + i;
   }
 
@@ -376,16 +385,16 @@ details.help li { margin-bottom: 6px; }
     }
     state.markers.forEach((m, i) => {
       const ll = m.getLatLng();
-      const isEnd = !state.loop && n >= 2 && i === n - 1;
+      const isEnd = isEndAt(i, n);
       const li = document.createElement("li");
       const tag = document.createElement("span");
       tag.className = "tag" + (isEnd ? " end" : "");
-      tag.textContent = i === 0 ? "D" : isEnd ? "A" : String(i);
+      tag.textContent = isEnd ? "A" : i === 0 ? "D" : String(i);
       const lbl = document.createElement("span");
       lbl.className = "lbl";
       lbl.append(pointName(i, n) + " ");
       const small = document.createElement("small");
-      small.textContent = ll.lat.toFixed(4) + ", " + ll.lng.toFixed(4);
+      small.textContent = m.placeName || (ll.lat.toFixed(4) + ", " + ll.lng.toFixed(4));
       lbl.append(small);
       const del = document.createElement("button");
       del.type = "button";
@@ -399,7 +408,7 @@ details.help li { margin-bottom: 6px; }
 
   function addPoint(latlng, silent) {
     const m = L.marker(latlng, { draggable: true, icon: pinIcon("", false), keyboard: false }).addTo(map);
-    m.on("dragend", () => { renderPoints(); save(); scheduleRoute(); });
+    m.on("dragend", () => { m.placeName = ""; renderPoints(); save(); scheduleRoute(); });
     m.on("contextmenu", () => removePoint(m));
     state.markers.push(m);
     refreshMarkers();
@@ -412,7 +421,11 @@ details.help li { margin-bottom: 6px; }
     refreshMarkers(); save(); scheduleRoute();
   }
 
-  map.on("click", (e) => { if (!nav.on) addPoint(e.latlng); });
+  map.on("click", (e) => {
+    if (nav.on) return;
+    if (destFirst && state.markers.length === 1) { insertStart(e.latlng); return; }
+    addPoint(e.latlng);
+  });
 
   /* ---------- calcul d'itinéraire (BRouter) ---------- */
   let timer = null, ctrl = null, firstFit = true;
@@ -646,7 +659,7 @@ details.help li { margin-bottom: 6px; }
       "  <metadata><name>" + name + "</name><time>" + new Date().toISOString() + "</time></metadata>\n";
     state.markers.forEach((m, i) => {
       const p = m.getLatLng();
-      x += '  <wpt lat="' + p.lat.toFixed(6) + '" lon="' + p.lng.toFixed(6) + '"><name>' + esc(pointName(i, n)) + "</name></wpt>\n";
+      x += '  <wpt lat="' + p.lat.toFixed(6) + '" lon="' + p.lng.toFixed(6) + '"><name>' + esc(m.placeName || pointName(i, n)) + "</name></wpt>\n";
     });
     x += "  <trk>\n    <name>" + name + "</name>\n    <trkseg>\n";
     cleanTrack(r.coords).forEach((c) => {
@@ -688,7 +701,13 @@ details.help li { margin-bottom: 6px; }
     if (!q) return;
     results.hidden = true; results.textContent = "";
     try {
-      const res = await fetch("https://nominatim.openstreetmap.org/search?format=json&limit=5&accept-language=fr&q=" + encodeURIComponent(q));
+      let url = "https://nominatim.openstreetmap.org/search?format=json&limit=6&accept-language=fr&q=" + encodeURIComponent(q);
+      if (map.getZoom() >= 9) {
+        // favorise les résultats proches de la zone affichée (sans exclure les autres)
+        const b = map.getBounds();
+        url += "&viewbox=" + [b.getWest(), b.getNorth(), b.getEast(), b.getSouth()].map((v) => v.toFixed(4)).join(",");
+      }
+      const res = await fetch(url);
       const list = await res.json();
       if (!list.length) { setStatus("Aucun lieu trouvé pour « " + q + " »."); return; }
       list.forEach((p) => {
@@ -696,8 +715,11 @@ details.help li { margin-bottom: 6px; }
         const b = document.createElement("button");
         b.type = "button"; b.textContent = p.display_name;
         b.addEventListener("click", () => {
-          map.setView([+p.lat, +p.lon], 13);
           results.hidden = true; results.textContent = "";
+          $("#q").value = "";
+          const parts = String(p.display_name).split(",").map((x) => x.trim()).filter(Boolean);
+          const label = (p.name && parts[0] !== p.name ? p.name + ", " : "") + parts.slice(0, 2).join(", ");
+          setDestination(L.latLng(+p.lat, +p.lon), label.slice(0, 70));
         });
         li.append(b); results.append(li);
       });
@@ -714,7 +736,7 @@ details.help li { margin-bottom: 6px; }
   $("#undo").addEventListener("click", () => { const m = state.markers[state.markers.length - 1]; if (m) removePoint(m); });
   $("#clear").addEventListener("click", () => {
     state.markers.forEach((m) => map.removeLayer(m));
-    state.markers = []; firstFit = true;
+    state.markers = []; firstFit = true; destFirst = false;
     refreshMarkers(); save(); scheduleRoute();
   });
   /* ---------- localisation : GPS natif dans l'app Android, navigateur sinon ---------- */
@@ -761,6 +783,7 @@ details.help li { margin-bottom: 6px; }
       } else {
         // ta position devient le départ ; un point déjà posé devient l'arrivée ou une étape
         addPoint(ll, true);
+        destFirst = false;
         state.markers.unshift(state.markers.pop());
         refreshMarkers();
       }
@@ -983,6 +1006,7 @@ details.help li { margin-bottom: 6px; }
     const entry = {
       id: String(Date.now()), name, savedAt: Date.now(),
       pts: state.markers.map((m) => [+m.getLatLng().lat.toFixed(6), +m.getLatLng().lng.toFixed(6)]),
+      names: state.markers.map((m) => m.placeName || ""),
       profile: state.profile, loop: state.loop, dist: r.dist, up: r.up, down: r.down,
       // le tracé calculé est conservé : la rando se rouvre et se suit sans réseau
       track: r.coords.map((c) => [+c[0].toFixed(5), +c[1].toFixed(5), c[2] == null ? 0 : +Number(c[2]).toFixed(1)]),
@@ -1011,7 +1035,13 @@ details.help li { margin-bottom: 6px; }
     state.markers = [];
     state.profile = h.profile || "hiking-mountain"; state.loop = !!h.loop; state.name = h.name;
     $("#profile").value = state.profile; $("#loop").checked = state.loop; $("#name").value = h.name;
-    h.pts.forEach((p) => addPoint(L.latLng(p[0], p[1]), true));
+    destFirst = false;
+    h.pts.forEach((p, i) => {
+      addPoint(L.latLng(p[0], p[1]), true);
+      const nm = Array.isArray(h.names) ? h.names[i] : "";
+      if (typeof nm === "string" && nm) state.markers[i].placeName = nm.slice(0, 70);
+    });
+    refreshMarkers();
     save();
     if (Array.isArray(h.track) && h.track.length > 1) {
       firstFit = true;
@@ -1068,6 +1098,9 @@ details.help li { margin-bottom: 6px; }
       profile: ["hiking-mountain", "trekking", "shortest"].includes(h.profile) ? h.profile : "hiking-mountain",
     };
     if (okTrack) out.track = h.track.map((c) => [c[0], c[1], Number.isFinite(c[2]) ? c[2] : 0]);
+    if (Array.isArray(h.names) && h.names.length === h.pts.length && pts.length === h.pts.length) {
+      out.names = h.names.map((x) => (typeof x === "string" ? x.slice(0, 70) : ""));
+    }
     return out;
   }
 
@@ -1140,9 +1173,66 @@ details.help li { margin-bottom: 6px; }
   });
   checkApkUpdate();
 
+
+  /* ---------- destination choisie par la recherche ---------- */
+  function insertStart(ll) {
+    addPoint(ll, true);
+    state.markers.unshift(state.markers.pop());
+    destFirst = false;
+    refreshMarkers(); save(); scheduleRoute();
+  }
+
+  async function setDestination(ll, label) {
+    if (nav.on) return;
+    const n = state.markers.length;
+    if (n >= 2 && !state.loop) {
+      // l'arrivée existante est déplacée sur le lieu choisi
+      const last = state.markers[n - 1];
+      last.setLatLng(ll); last.placeName = label;
+      refreshMarkers(); save(); scheduleRoute();
+      setStatus("Arrivée : " + label + ".");
+      return;
+    }
+    if (n >= 1) {
+      addPoint(ll, true);
+      state.markers[state.markers.length - 1].placeName = label;
+      refreshMarkers(); save(); scheduleRoute();
+      setStatus((state.loop ? "Étape ajoutée : " : "Arrivée : ") + label + ".");
+      return;
+    }
+    // aucun point : on pose l'arrivée, puis on prend ta position comme départ
+    destFirst = true;
+    addPoint(ll, true);
+    state.markers[0].placeName = label;
+    refreshMarkers(); save();
+    map.setView(ll, Math.max(map.getZoom(), 15));
+    setStatus("Arrivée : " + label + ". Recherche de ta position pour le départ…");
+    try {
+      const pos = await getPosition();
+      if (!destFirst || state.markers.length !== 1) return; // un départ a été posé entre-temps
+      const start = L.latLng(pos.coords.latitude, pos.coords.longitude);
+      if (start.distanceTo(ll) < 30) {
+        setStatus("Tu es déjà à « " + label + " ». Touche la carte pour poser le départ.");
+        return;
+      }
+      insertStart(start);
+      setStatus("Départ : ta position. Arrivée : " + label + ".");
+    } catch (e) {
+      if (destFirst && state.markers.length === 1) {
+        setStatus("Arrivée : " + label + ". Position indisponible : touche la carte pour poser le départ.", isDenied(e));
+      }
+    }
+  }
+
   /* ---------- reprise de la session précédente ---------- */
   if (Array.isArray(saved.pts) && saved.pts.length) {
-    saved.pts.forEach((p) => addPoint(L.latLng(p[0], p[1]), true));
+    destFirst = !!saved.destFirst && saved.pts.length === 1;
+    saved.pts.forEach((p, i) => {
+      addPoint(L.latLng(p[0], p[1]), true);
+      const nm = Array.isArray(saved.names) ? saved.names[i] : "";
+      if (typeof nm === "string" && nm) state.markers[i].placeName = nm.slice(0, 70);
+    });
+    refreshMarkers();
     map.fitBounds(L.latLngBounds(saved.pts), { padding: [40, 40], maxZoom: 14 });
     scheduleRoute();
   } else {
