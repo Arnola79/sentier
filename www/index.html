@@ -388,6 +388,7 @@ details.help li { margin-bottom: 6px; }
         <section class="card">
           <h2 class="label">Suivi</h2>
           <label class="switch"><span>Garder l'écran allumé<small>Dans l'app, le suivi continue écran éteint grâce à la notification.</small></span><input type="checkbox" id="keepon"></label>
+          <label class="switch"><span>Recalcul automatique<small>Si tu quittes le tracé, nouvel itinéraire depuis ta position vers les étapes et l'arrivée restantes.</small></span><input type="checkbox" id="reroute"></label>
           <label class="switch"><span>Annonces vocales<small>Hors itinéraire, retour sur le tracé, arrivée dans 1 km et 500 m.</small></span><input type="checkbox" id="voice"></label>
         </section>
         <section class="card">
@@ -452,7 +453,7 @@ details.help li { margin-bottom: 6px; }
   const BROUTER = "https://brouter.de/brouter";
 
   /* ---------- état ---------- */
-  const state = { markers: [], profile: "hiking-mountain", loop: false, route: null, layer: "OpenTopoMap", name: "", pace: "moyen", keepOn: null, autoMap: true, region: "", voice: true, overlays: null };
+  const state = { markers: [], profile: "hiking-mountain", loop: false, route: null, layer: "OpenTopoMap", name: "", pace: "moyen", keepOn: null, autoMap: true, region: "", voice: true, overlays: null, autoReroute: true };
 
   function load() {
     try { return JSON.parse(localStorage.getItem(LS_KEY)) || {}; } catch { return {}; }
@@ -465,7 +466,7 @@ details.help li { margin-bottom: 6px; }
         destFirst: destFirst && state.markers.length === 1,
         profile: state.profile, loop: state.loop, layer: state.layer, name: state.name,
         pace: state.pace, keepOn: state.keepOn, autoMap: state.autoMap, region: state.region,
-        voice: state.voice, overlays: state.overlays,
+        voice: state.voice, overlays: state.overlays, autoReroute: state.autoReroute,
       }));
     } catch { /* stockage indisponible : on continue sans */ }
   }
@@ -476,6 +477,7 @@ details.help li { margin-bottom: 6px; }
   if (typeof saved.keepOn === "boolean") state.keepOn = saved.keepOn;
   if (saved.autoMap === false) state.autoMap = false;
   if (saved.voice === false) state.voice = false;
+  if (saved.autoReroute === false) state.autoReroute = false;
   if (Array.isArray(saved.overlays)) state.overlays = saved.overlays;
   if (typeof saved.region === "string") state.region = saved.region;
   if (saved.layer) state.layer = saved.layer;
@@ -1220,9 +1222,8 @@ details.help li { margin-bottom: 6px; }
     // heure d'arrivée : rythme choisi, corrigé par ta vitesse réelle après 10 min de marche
     let factor = 1;
     const elapsedH = (Date.now() - rec.startedAt) / 3600000;
-    const covered = loc.along - nav.startAlong;
-    if (elapsedH > 1 / 6 && covered > 500) {
-      const predicted = hoursFor(covered, Math.max(0, r.cumUp[loc.i] - nav.startUp));
+    if (elapsedH > 1 / 6 && rec.dist > 500) {
+      const predicted = hoursFor(rec.dist, rec.up);
       if (predicted > 0) factor = Math.min(3, Math.max(0.5, elapsedH / predicted));
       $("#h-eta-lbl").textContent = "Arrivée (ton rythme)";
     }
@@ -1244,6 +1245,7 @@ details.help li { margin-bottom: 6px; }
         if (Date.now() - nav.lastBuzz > 30000) { nav.lastBuzz = Date.now(); buzz([300, 150, 300]); }
         if (!nav.wasOff || Date.now() - nav.lastSay > 120000) { nav.lastSay = Date.now(); say("Attention, tu t'éloignes de l'itinéraire : " + spokenKm(loc.d) + "."); }
         nav.wasOff = true;
+        if (state.autoReroute && nav.off >= 3 && !nav.rerouting && Date.now() - nav.lastReroute > 45000) reroute(lat, lng, loc);
       }
     } else {
       nav.off = 0; banner.hidden = true;
@@ -1281,7 +1283,7 @@ details.help li { margin-bottom: 6px; }
     }
     const BG = plug("BackgroundGeolocation"), G = nativeGeo();
     if (!BG && !G && !navigator.geolocation) { setStatus("Localisation indisponible sur cet appareil.", true); return; }
-    Object.assign(nav, { on: true, withRoute: !!state.route, first: true, follow: true, off: 0, arrived: false, lastBuzz: 0, startAlong: null, startUp: 0, lastIdx: 0, said: {}, wasOff: false, lastSay: 0 });
+    Object.assign(nav, { on: true, withRoute: !!state.route, first: true, follow: true, off: 0, arrived: false, lastBuzz: 0, startAlong: null, startUp: 0, lastIdx: 0, said: {}, wasOff: false, lastSay: 0, lastReroute: 0, rerouting: false, reroutes: 0 });
     if (nav.withRoute) say("Suivi démarré. " + spokenKm(state.route.dist) + ", " + Math.round(state.route.up) + " mètres de montée.");
     else say("Enregistrement démarré.");
     recStart();
@@ -2194,6 +2196,49 @@ details.help li { margin-bottom: 6px; }
   }
   $("#h-share").addEventListener("click", sharePosition);
   $("#share-pos").addEventListener("click", sharePosition);
+
+
+  /* ---------- recalcul de l'itinéraire depuis ta position ---------- */
+  /* REROUTE-START */
+  // étapes encore devant toi sur le tracé actuel (l'arrivée est toujours gardée)
+  function waypointsAhead(r, seq, along) {
+    const ahead = [];
+    for (let i = 1; i < seq.length; i++) {
+      const p = seq[i];
+      const a = i === seq.length - 1 ? r.dist : nearestOnRoute(r, p.lat, p.lng, 0, r.coords.length - 2).along;
+      if (a > along + 30) ahead.push(p);
+    }
+    if (!ahead.length) ahead.push(seq[seq.length - 1]);
+    return ahead;
+  }
+  /* REROUTE-END */
+  async function reroute(lat, lng, loc) {
+    nav.rerouting = true; nav.lastReroute = Date.now();
+    const r = state.route;
+    const pts = state.markers.map((m) => m.getLatLng());
+    const seq = state.loop ? pts.concat([pts[0]]) : pts;
+    const ahead = waypointsAhead(r, seq, loc.along);
+    const lonlats = [L.latLng(lat, lng)].concat(ahead).map((p) => p.lng.toFixed(6) + "," + p.lat.toFixed(6)).join("|");
+    $("#hud-msg").hidden = false; $("#hud-msg").textContent = "Recalcul de l'itinéraire depuis ta position…";
+    try {
+      const res = await fetch(BROUTER + "?lonlats=" + lonlats + "&profile=" + encodeURIComponent(state.profile) + "&alternativeidx=0&format=geojson");
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const gj = await res.json();
+      if (!nav.on || !nav.withRoute) return;
+      setRoute(gj.features[0].geometry.coordinates);
+      Object.assign(nav, { first: true, lastIdx: 0, off: 0, wasOff: false, said: {}, reroutes: nav.reroutes + 1 });
+      $("#hud-off").hidden = true; $("#hud-msg").hidden = true;
+      setStatus("Nouvel itinéraire depuis ta position : " + fmtKm(state.route.dist) + " jusqu'à l'arrivée.");
+      say("Nouvel itinéraire calculé. " + spokenKm(state.route.dist) + " jusqu'à l'arrivée.");
+      buzz([150]);
+    } catch {
+      $("#hud-msg").textContent = "Recalcul impossible (pas de réseau ?). Rejoins le tracé ou réessaie plus loin.";
+    } finally {
+      nav.rerouting = false;
+    }
+  }
+  $("#reroute").checked = state.autoReroute;
+  $("#reroute").addEventListener("change", (e) => { state.autoReroute = e.target.checked; save(); });
 
   /* ---------- carte officielle selon le pays affiché ---------- */
   /* REGION-MAP-START */
