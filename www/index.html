@@ -9,277 +9,372 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&display=swap">
 <link rel="stylesheet" href="leaflet/leaflet.css">
 <style>
-/* Mise en page : panneau de contrôle à gauche, carte plein cadre à droite ; sur téléphone la carte passe au-dessus du panneau.
-   Palette : encre verte, fond gris-vert, trace orange (visible sur tous les fonds de carte). */
+/* Mise en page : panneau à onglets à gauche (Itinéraire, Mes randos, Plus), carte plein cadre à droite,
+   barre d'actions fixe en bas du panneau. Sur téléphone, la carte occupe le haut et le panneau le bas. */
 :root {
-  --bg: #f1f4f1;
+  --bg: #f3f5f3;
   --surface: #ffffff;
-  --ink: #15231c;
-  --muted: #5d6e64;
-  --line: #d3dcd5;
-  --forest: #1f5e45;
+  --sunken: #eaefeb;
+  --ink: #17241d;
+  --muted: #5f6f66;
+  --line: #dbe3dd;
+  --forest: #1d5a43;
   --forest-ink: #ffffff;
-  --trace: #e8590c;
+  --forest-soft: #e3efe8;
+  --trace: #e4570f;
+  --trace-ink: #ffffff;
   --danger: #b42318;
+  --danger-soft: #fdecea;
+  --shadow: 0 1px 2px rgba(20, 36, 28, .06), 0 4px 14px rgba(20, 36, 28, .06);
   --f-display: "Barlow Condensed", "Arial Narrow", sans-serif;
-  --f-body: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-body: "Barlow", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --r: 12px;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #101914; --surface: #17231c; --ink: #e7efe9; --muted: #9bb0a2;
-    --line: #2a3b31; --forest: #58b98d; --forest-ink: #08160f; --trace: #ff7a30; --danger: #ff8f83;
+    --bg: #0e1612; --surface: #15201a; --sunken: #101a15; --ink: #e5ede7; --muted: #97aa9e;
+    --line: #26362d; --forest: #5cbf93; --forest-ink: #07140e; --forest-soft: #1a2e24;
+    --trace: #ff7a30; --trace-ink: #1a0b02; --danger: #ff8f83; --danger-soft: #3a1714;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 4px 14px rgba(0, 0, 0, .25);
     color-scheme: dark;
   }
 }
+:root[data-theme="dark"] {
+  --bg: #0e1612; --surface: #15201a; --sunken: #101a15; --ink: #e5ede7; --muted: #97aa9e;
+  --line: #26362d; --forest: #5cbf93; --forest-ink: #07140e; --forest-soft: #1a2e24;
+  --trace: #ff7a30; --trace-ink: #1a0b02; --danger: #ff8f83; --danger-soft: #3a1714;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 4px 14px rgba(0, 0, 0, .25);
+  color-scheme: dark;
+}
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; }
-body { background: var(--bg); color: var(--ink); font: 15px/1.45 var(--f-body); }
+body { background: var(--bg); color: var(--ink); font: 15px/1.45 var(--f-body); -webkit-tap-highlight-color: transparent; }
 button, input, select { font: inherit; color: inherit; }
 button { cursor: pointer; }
 :focus-visible { outline: 2px solid var(--forest); outline-offset: 2px; }
-
-.app { display: grid; grid-template-columns: minmax(330px, 390px) 1fr; height: 100%; }
 [hidden] { display: none !important; }
+svg.i { width: 18px; height: 18px; flex: none; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+.app { display: grid; grid-template-columns: minmax(340px, 400px) 1fr; height: 100%; }
 .mapwrap { position: relative; min-width: 0; min-height: 0; }
 #map { position: absolute; inset: 0; background: #dfe6e0; }
-.panel {
-  display: flex; flex-direction: column; min-height: 0; min-width: 0;
-  background: var(--bg); border-right: 1px solid var(--line);
-}
-.scroll { flex: 1; overflow-y: auto; padding: 16px 16px 8px; display: flex; flex-direction: column; gap: 16px; }
+.panel { display: flex; flex-direction: column; min-height: 0; min-width: 0; background: var(--bg); border-right: 1px solid var(--line); }
 
-.head { display: flex; align-items: baseline; gap: 12px; }
-.brand { font: 700 22px/1 var(--f-display); letter-spacing: .14em; color: var(--forest); }
-#ver { flex: none; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
-#name {
-  flex: 1; min-width: 0; border: 0; border-bottom: 1px dashed var(--line); background: transparent;
-  padding: 4px 0; font-weight: 500;
-}
+/* en-tête */
+.topbar { padding: 14px 16px 0; display: flex; flex-direction: column; gap: 10px; background: var(--bg); }
+.brandrow { display: flex; align-items: center; gap: 10px; }
+.logo { width: 30px; height: 30px; border-radius: 8px; background: var(--forest); color: var(--forest-ink); display: grid; place-items: center; flex: none; }
+.logo svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.brand { font: 700 21px/1 var(--f-display); letter-spacing: .12em; }
+#ver { font-size: 12px; color: var(--muted); background: var(--sunken); border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; font-variant-numeric: tabular-nums; }
+.namefield { margin-left: auto; min-width: 0; flex: 1; display: flex; align-items: center; gap: 6px; justify-content: flex-end; color: var(--muted); }
+#name { min-width: 0; width: 100%; max-width: 220px; border: 1px solid transparent; background: transparent; padding: 5px 8px; border-radius: 8px; font-weight: 600; color: var(--ink); text-align: right; }
+#name:hover, #name:focus { border-color: var(--line); background: var(--surface); text-align: left; }
 
-.search { position: relative; display: flex; gap: 8px; }
-.search input {
-  flex: 1; min-width: 0; padding: 9px 11px; border: 1px solid var(--line);
-  background: var(--surface); border-radius: 6px;
-}
-.btn {
-  padding: 8px 12px; border: 1px solid var(--line); background: var(--surface);
-  border-radius: 6px; font-weight: 500; white-space: nowrap;
-}
+.tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 4px; background: var(--sunken); border: 1px solid var(--line); border-radius: 10px; }
+.tab { border: 0; background: transparent; padding: 7px 6px; border-radius: 7px; font-weight: 600; font-size: 14px; color: var(--muted); display: flex; align-items: center; justify-content: center; gap: 6px; }
+.tab[aria-selected="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+.tab .count { font-size: 12px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+.scroll { flex: 1; overflow-y: auto; padding: 12px 16px 16px; }
+.tabpanel { display: flex; flex-direction: column; gap: 12px; }
+
+/* blocs */
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+.card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.label { margin: 0; font: 600 13px/1.2 var(--f-display); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.note { margin: 0; font-size: 13px; color: var(--muted); }
+.hint { color: var(--muted); margin: 0; font-size: 14px; }
+
+/* boutons */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 12px; border: 1px solid var(--line); background: var(--surface); border-radius: 9px; font-weight: 600; font-size: 14px; white-space: nowrap; }
 .btn:hover { border-color: var(--forest); }
 .btn:disabled { opacity: .45; cursor: not-allowed; }
-#results {
-  position: absolute; z-index: 5; top: 100%; left: 0; right: 0; margin: 4px 0 0; padding: 4px;
-  list-style: none; background: var(--surface); border: 1px solid var(--line); border-radius: 6px;
-  box-shadow: 0 8px 24px rgba(0,0,0,.18);
-}
-#results button { width: 100%; text-align: left; border: 0; background: none; padding: 7px 8px; border-radius: 4px; }
-#results button:hover { background: var(--bg); }
+.btn.ghost { background: transparent; border-color: transparent; color: var(--muted); }
+.btn.ghost:hover { color: var(--ink); background: var(--sunken); }
+.btn.accent { background: var(--forest-soft); border-color: transparent; color: var(--forest); }
+.btn.arm, #hikes .del.arm { color: #fff; background: #b42318; border-color: #b42318; }
+.row-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.tools { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.tools .btn { flex-direction: column; gap: 3px; padding: 8px 4px; font-size: 12.5px; font-weight: 600; white-space: normal; text-align: center; line-height: 1.15; }
 
-.opts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.opts select {
-  grid-column: 1 / -1; padding: 8px 10px; border: 1px solid var(--line);
-  background: var(--surface); border-radius: 6px;
-}
-.check { display: flex; align-items: center; gap: 8px; grid-column: 1 / -1; }
-.check input { width: 18px; height: 18px; accent-color: var(--forest); }
-.row { display: flex; gap: 8px; grid-column: 1 / -1; flex-wrap: wrap; }
+/* recherche */
+.search { position: relative; }
+.searchbox { display: flex; align-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding-left: 10px; color: var(--muted); }
+.searchbox:focus-within { border-color: var(--forest); box-shadow: 0 0 0 3px var(--forest-soft); }
+.searchbox input { flex: 1; min-width: 0; border: 0; background: transparent; padding: 10px 8px; outline: none; color: var(--ink); }
+.searchbox button { border: 0; background: var(--forest); color: var(--forest-ink); margin: 4px; padding: 7px 12px; border-radius: 7px; font-weight: 600; font-size: 14px; }
+#results { position: absolute; z-index: 1000; top: calc(100% + 4px); left: 0; right: 0; margin: 0; padding: 4px; list-style: none; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.18); }
+#results button { width: 100%; text-align: left; border: 0; background: none; padding: 8px 10px; border-radius: 6px; font-size: 14px; }
+#results button:hover { background: var(--sunken); }
 
-#status { margin: 0; min-height: 1.4em; color: var(--muted); font-size: 14px; }
-#status.err { color: var(--danger); }
+/* points : présentés comme un fil, du départ à l'arrivée */
+#pts { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; position: relative; }
+#pts li { display: flex; align-items: center; gap: 10px; padding: 6px 0; position: relative; }
+#pts li + li::before { content: ""; position: absolute; left: 12px; top: -8px; height: 16px; border-left: 2px dotted var(--line); }
+#pts li.hint { display: block; }
+#pts .tag { flex: none; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font: 700 14px/1 var(--f-display); background: var(--forest); color: var(--forest-ink); }
+#pts .tag.end { background: var(--trace); color: var(--trace-ink); }
+#pts .lbl { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#pts .lbl small { color: var(--muted); font-weight: 400; font-variant-numeric: tabular-nums; margin-left: 4px; }
+#pts button { border: 0; background: none; color: var(--muted); font-size: 18px; line-height: 1; padding: 6px 8px; border-radius: 6px; }
+#pts button:hover { color: var(--danger); background: var(--danger-soft); }
 
-.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; border-block: 1px solid var(--line); padding: 10px 0; }
-.stat { min-width: 0; }
-.stat b {
-  display: block; font: 600 28px/1.05 var(--f-display); font-variant-numeric: tabular-nums; white-space: nowrap;
-}
+/* réglages */
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field > span { font-size: 13px; font-weight: 600; color: var(--muted); }
+select { width: 100%; padding: 9px 10px; border: 1px solid var(--line); background: var(--surface); border-radius: 9px; }
+.seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 3px; background: var(--sunken); border: 1px solid var(--line); border-radius: 9px; }
+.seg button { border: 0; background: transparent; border-radius: 7px; padding: 6px 4px; font-size: 13.5px; font-weight: 600; color: var(--muted); line-height: 1.2; }
+.seg button small { display: block; font-size: 11.5px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+.switch { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-weight: 600; font-size: 14px; cursor: pointer; }
+.switch small { display: block; font-weight: 400; color: var(--muted); font-size: 12.5px; }
+.switch input { appearance: none; -webkit-appearance: none; flex: none; width: 42px; height: 24px; border-radius: 999px; background: var(--line); position: relative; cursor: pointer; transition: background .15s; margin: 0; }
+.switch input::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.3); transition: transform .15s; }
+.switch input:checked { background: var(--forest); }
+.switch input:checked::after { transform: translateX(18px); }
+
+/* chiffres et profil */
+.stats { display: grid; grid-template-columns: 1fr 1fr 1fr 1.35fr; }
+.stat { min-width: 0; padding: 0 8px; border-left: 1px solid var(--line); }
+.stat:first-child { padding-left: 0; border-left: 0; }
+.stat b { display: block; font: 600 25px/1.05 var(--f-display); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: clip; }
 .stat b small { font-size: 14px; font-weight: 500; color: var(--muted); margin-left: 2px; }
-.stat span { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
-
+.stat span { font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
 .chart { margin: 0; }
-#prof { width: 100%; height: 130px; display: block; touch-action: none; }
-#hover { min-height: 1.4em; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+#prof { width: 100%; height: 120px; display: block; touch-action: none; }
+#hover { min-height: 1.3em; font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; margin-top: 4px; }
 
-h2 { margin: 0 0 6px; font: 600 13px/1 var(--f-display); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
-#pts { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
-#pts li { display: flex; align-items: center; gap: 10px; padding: 5px 0; }
-#pts .tag {
-  flex: none; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
-  font: 700 14px/1 var(--f-display); background: var(--forest); color: var(--forest-ink);
-}
-#pts .tag.end { background: var(--trace); color: #fff; }
-#pts .lbl { flex: 1; min-width: 0; }
-#pts .lbl small { color: var(--muted); font-variant-numeric: tabular-nums; }
-#pts button { border: 0; background: none; color: var(--muted); font-size: 18px; line-height: 1; padding: 4px 8px; border-radius: 4px; }
-#pts button:hover { color: var(--danger); }
-.hint { color: var(--muted); margin: 0; }
-
-details.help { border-top: 1px solid var(--line); padding-top: 10px; }
-details.help summary { cursor: pointer; font-weight: 600; }
-details.help ol { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
-details.help li { margin-bottom: 6px; }
-
-.export {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
-  padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--line); background: var(--bg);
-}
-.primary.follow { background: var(--trace); color: #fff; }
-
-/* suivi de l'itinéraire */
-#hud {
-  position: absolute; z-index: 900; left: 10px; right: 10px; bottom: 34px; max-width: 440px; margin-inline: auto;
-  background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 8px;
-  padding: 10px 12px; box-shadow: 0 4px 18px rgba(0,0,0,.3);
-}
-#hud-off { margin-bottom: 8px; padding: 6px 10px; border-radius: 6px; font-weight: 600; color: #fff; }
-#hud-off.warn { background: #b42318; }
-#hud-off.ok { background: #1f5e45; }
-#hud-msg { margin: 0 0 6px; color: var(--muted); font-size: 14px; }
-.hud-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.hud-row b { display: block; font: 600 26px/1.05 var(--f-display); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.hud-row span { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
-#h-recenter { margin-top: 8px; width: 100%; }
-.following .search, .following .opts, .following #pts button, .following .saved { opacity: .45; pointer-events: none; }
+/* encadrés d'information (mise à jour, sortie terminée) */
+.notice { border: 1px solid var(--forest); background: var(--forest-soft); border-radius: var(--r); padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+.notice p { margin: 0; }
+.notice.trace { border-color: var(--trace); background: var(--surface); }
 
 /* randos enregistrées */
-.saved-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
-.saved-head h2 { margin: 0; }
-#hikes { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+#hikes { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
 #hikes li { display: flex; align-items: stretch; gap: 6px; }
-#hikes .open { flex: 1; min-width: 0; text-align: left; padding: 8px 10px; border: 1px solid var(--line); background: var(--surface); border-radius: 6px; }
+#hikes .open { flex: 1; min-width: 0; text-align: left; padding: 10px 12px; border: 1px solid var(--line); background: var(--surface); border-radius: 10px; display: flex; flex-direction: column; gap: 2px; }
 #hikes .open:hover { border-color: var(--forest); }
-#hikes .open b { display: block; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#hikes .open b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #hikes .open small { color: var(--muted); font-variant-numeric: tabular-nums; }
-#hikes .del { border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 0 12px; color: var(--muted); }
-#hikes .del.arm { color: #fff; background: #b42318; border-color: #b42318; }
-#upd { border: 1px solid var(--forest); border-radius: 8px; padding: 10px 12px; background: var(--surface); display: flex; flex-direction: column; gap: 8px; }
-#upd p { margin: 0; }
-#upd .row-btns { margin-top: 0; }
-.row-btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
-.note { margin: 8px 0 0; font-size: 13px; color: var(--muted); }
-.primary {
-  width: 100%; padding: 12px; border: 0; border-radius: 6px; background: var(--forest); color: var(--forest-ink);
-  font: 600 17px/1 var(--f-display); letter-spacing: .1em; text-transform: uppercase;
-}
-.primary:disabled { opacity: .4; cursor: not-allowed; }
+#hikes .del { border: 1px solid var(--line); background: var(--surface); border-radius: 10px; padding: 0 12px; color: var(--muted); }
 
-.pin span {
-  display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%;
-  background: var(--forest); color: var(--forest-ink); border: 2px solid #fff;
-  box-shadow: 0 1px 5px rgba(0,0,0,.45); font: 700 14px/1 var(--f-display);
-}
-.pin.end span { background: var(--trace); color: #fff; }
+details.help summary { cursor: pointer; font-weight: 600; }
+details.help ol { margin: 10px 0 0; padding-left: 20px; color: var(--muted); font-size: 14px; }
+details.help li { margin-bottom: 6px; }
+#off-prog { font-variant-numeric: tabular-nums; }
+
+/* barre d'actions */
+.actionbar { padding: 10px 16px calc(12px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--line); background: var(--surface); display: flex; flex-direction: column; gap: 8px; }
+#status { margin: 0; min-height: 1.35em; color: var(--muted); font-size: 13.5px; line-height: 1.35; }
+#status.err { color: var(--danger); }
+.actions { display: grid; grid-template-columns: 1.4fr 1fr; gap: 8px; }
+.primary { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 13px 8px; border: 1px solid transparent; border-radius: 10px; font: 600 16px/1 var(--f-display); letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; }
+.primary.follow { background: var(--trace); color: var(--trace-ink); }
+.primary.alt { background: var(--surface); color: var(--ink); border-color: var(--line); }
+.primary:disabled { opacity: .4; cursor: not-allowed; }
+.primary svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* suivi en cours */
+#hud { position: absolute; z-index: 900; left: 10px; right: 10px; bottom: 30px; max-width: 440px; margin-inline: auto; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; box-shadow: 0 8px 28px rgba(0,0,0,.28); display: flex; flex-direction: column; gap: 10px; }
+#hud-off { padding: 7px 10px; border-radius: 8px; font-weight: 600; color: #fff; }
+#hud-off.warn { background: #b42318; }
+#hud-off.ok { background: #1d5a43; }
+#hud-msg { margin: 0; color: var(--muted); font-size: 14px; }
+.hud-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.hud-row + .hud-row { border-top: 1px solid var(--line); padding-top: 8px; }
+.hud-row b { display: block; font: 600 25px/1.05 var(--f-display); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.hud-row span { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+#h-recenter { width: 100%; }
+.following .search, .following .route-edit, .following #pts button, .following [data-panel="hikes"] { opacity: .45; pointer-events: none; }
+
+.pin span { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: #1d5a43; color: #fff; border: 2px solid #fff; box-shadow: 0 1px 5px rgba(0,0,0,.45); font: 700 14px/1 var(--f-display); }
+.pin.end span { background: #e4570f; }
+.leaflet-control-layers, .leaflet-bar { border-radius: 10px !important; }
 
 @media (max-width: 760px) {
-  /* téléphone : la carte occupe le haut, le panneau défile en dessous */
-  .app { grid-template-columns: 1fr; grid-template-rows: minmax(260px, 50%) minmax(0, 1fr); }
+  .app { grid-template-columns: 1fr; grid-template-rows: minmax(240px, 44%) minmax(0, 1fr); }
   .mapwrap { order: -1; }
   .panel { border-right: 0; border-top: 1px solid var(--line); }
-  .scroll { padding: 12px 14px 6px; gap: 12px; }
-  .brand { font-size: 20px; }
-  .opts { gap: 6px; }
-  .row .btn { padding: 6px 10px; font-size: 14px; }
-  .stat b { font-size: 24px; }
-  #prof { height: 110px; }
-  .export { padding-top: 8px; }
+  .topbar { padding: 10px 14px 0; gap: 8px; }
+  .scroll { padding: 10px 14px 14px; }
+  .actionbar { padding-inline: 14px; }
+  .stat b { font-size: 21px; }
+  .stat { padding: 0 6px; }
+  #prof { height: 100px; }
+  .card { padding: 12px; gap: 10px; }
 }
-@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; transition: none !important; } }
 </style>
 </head>
 <body>
 <main class="app">
   <aside class="panel">
+    <header class="topbar">
+      <div class="brandrow">
+        <div class="logo" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 20l6-11 4 6 3-4 5 9z"/><circle cx="17" cy="5" r="2"/></svg></div>
+        <div class="brand">SENTIER</div>
+        <span id="ver" hidden></span>
+        <label class="namefield" title="Nom de la randonnée">
+          <input id="name" aria-label="Nom de la randonnée" autocomplete="off">
+        </label>
+      </div>
+      <nav class="tabs" role="tablist" aria-label="Sections">
+        <button class="tab" role="tab" id="tab-route" data-tab="route" aria-selected="true" type="button">Itinéraire</button>
+        <button class="tab" role="tab" id="tab-hikes" data-tab="hikes" aria-selected="false" type="button">Mes randos <span class="count" id="hikes-count"></span></button>
+        <button class="tab" role="tab" id="tab-more" data-tab="more" aria-selected="false" type="button">Plus</button>
+      </nav>
+    </header>
+
     <div class="scroll">
-      <div id="upd" hidden role="status">
+      <div id="upd" class="notice" hidden role="status" style="margin-bottom:12px">
         <p id="upd-txt"><b>Nouvelle version de Sentier disponible.</b></p>
         <div class="row-btns">
           <button class="btn" id="upd-go" type="button">Installer</button>
-          <button class="btn" id="upd-later" type="button">Plus tard</button>
+          <button class="btn ghost" id="upd-later" type="button">Plus tard</button>
         </div>
       </div>
-      <div class="head">
-        <div class="brand">SENTIER</div>
-        <span id="ver" hidden></span>
-        <input id="name" aria-label="Nom de la randonnée" autocomplete="off">
-      </div>
-
-      <form class="search" id="search" autocomplete="off">
-        <input id="q" type="search" placeholder="Chercher un lieu, un col, un village" aria-label="Chercher un lieu">
-        <button class="btn" type="submit">Chercher</button>
-        <ul id="results" hidden></ul>
-      </form>
-
-      <div class="opts">
-        <select id="profile" aria-label="Type de chemin">
-          <option value="hiking-mountain">Randonnée : privilégier les sentiers</option>
-          <option value="trekking">Chemins larges et carrossables</option>
-          <option value="shortest">Le plus direct</option>
-        </select>
-        <label class="check"><input type="checkbox" id="loop"> Boucle : revenir au départ</label>
-        <div class="row">
-          <button class="btn" id="undo" type="button">Annuler le dernier point</button>
-          <button class="btn" id="clear" type="button">Tout effacer</button>
-          <button class="btn" id="locate" type="button">Partir de ma position</button>
-        </div>
-      </div>
-
-      <p id="status" role="status">Touche la carte pour poser le départ.</p>
-
-      <div class="stats">
-        <div class="stat"><b id="s-dist">—<small>km</small></b><span>Distance</span></div>
-        <div class="stat"><b id="s-up">—<small>m</small></b><span>D+</span></div>
-        <div class="stat"><b id="s-down">—<small>m</small></b><span>D−</span></div>
-        <div class="stat"><b id="s-time">—</b><span>Durée</span></div>
-      </div>
-
-      <figure class="chart">
-        <canvas id="prof" aria-label="Profil altimétrique"></canvas>
-        <figcaption id="hover">Survole le profil pour suivre la position sur la carte.</figcaption>
-      </figure>
-
-      <section>
-        <h2>Points de passage</h2>
-        <ol id="pts"></ol>
-      </section>
-
-      <section class="saved">
-        <div class="saved-head">
-          <h2>Mes randos</h2>
-          <button class="btn" id="save" type="button" disabled>Enregistrer</button>
-        </div>
-        <ul id="hikes"></ul>
+      <div id="recard" class="notice trace" hidden role="status" style="margin-bottom:12px">
+        <p id="rec-txt"></p>
         <div class="row-btns">
-          <button class="btn" id="backup" type="button">Sauvegarder mes randos</button>
-          <button class="btn" id="restore" type="button">Importer une sauvegarde</button>
-          <input id="restore-file" type="file" accept=".json,application/json" hidden>
+          <button class="btn accent" id="rec-save" type="button">Enregistrer dans Mes randos</button>
+          <button class="btn" id="rec-gpx" type="button">Export GPX</button>
+          <button class="btn ghost" id="rec-drop" type="button">Ignorer</button>
         </div>
-        <p class="note">Pour changer de téléphone : sauvegarde (Drive, e-mail, Fichiers), puis importe le fichier dans l'app du nouveau téléphone.</p>
-      </section>
+      </div>
 
-      <details class="help">
-        <summary>Envoyer sur la Fenix 6</summary>
-        <ol>
-          <li><b>Sur téléphone (app)</b> : « Télécharger le GPX » ouvre le menu de partage, enregistre le fichier (Fichiers ou Drive), puis importe-le dans Garmin Connect depuis un navigateur.</li>
-          <li><b>Garmin Connect (web)</b> : Entraînement, Parcours, Importer, choisis le .gpx, puis « Envoyer vers l'appareil ». La montre le reçoit à la prochaine synchronisation.</li>
-          <li><b>USB</b> : copie le .gpx dans le dossier <code>Garmin/NewFiles</code> de la montre. Si le parcours n'apparaît pas, passe par Garmin Connect.</li>
-          <li><b>Sur la montre</b> : activité Rando, Navigation, Parcours.</li>
-          <li><b>Sans montre</b> : touche « Suivre » pour te guider avec le téléphone (écran allumé).</li>
-        </ol>
-      </details>
+      <!-- Onglet Itinéraire -->
+      <div class="tabpanel" data-panel="route" role="tabpanel" aria-labelledby="tab-route">
+        <form class="search" id="search" autocomplete="off">
+          <div class="searchbox">
+            <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+            <input id="q" type="search" placeholder="Destination : lieu, adresse…" aria-label="Chercher une destination">
+            <button type="submit">Chercher</button>
+          </div>
+          <ul id="results" hidden></ul>
+        </form>
+
+        <section class="card">
+          <div class="card-head"><h2 class="label">Points de passage</h2></div>
+          <ol id="pts"></ol>
+          <div class="tools route-edit">
+            <button class="btn" id="locate" type="button"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="7"/></svg>Partir de ma position</button>
+            <button class="btn" id="undo" type="button"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 010 10h-3"/></svg>Annuler le dernier point</button>
+            <button class="btn" id="clear" type="button"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>Tout effacer</button>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="stats">
+            <div class="stat"><b id="s-dist">—<small>km</small></b><span>Distance</span></div>
+            <div class="stat"><b id="s-up">—<small>m</small></b><span>D+</span></div>
+            <div class="stat"><b id="s-down">—<small>m</small></b><span>D−</span></div>
+            <div class="stat"><b id="s-time">—</b><span>Durée</span></div>
+          </div>
+          <figure class="chart">
+            <canvas id="prof" aria-label="Profil altimétrique"></canvas>
+            <figcaption id="hover">Survole le profil pour suivre la position sur la carte.</figcaption>
+          </figure>
+        </section>
+
+        <section class="card route-edit">
+          <h2 class="label">Réglages de l'itinéraire</h2>
+          <label class="field"><span>Type de chemin</span>
+            <select id="profile">
+              <option value="hiking-mountain">Randonnée : privilégier les sentiers</option>
+              <option value="trekking">Chemins larges et carrossables</option>
+              <option value="shortest">Le plus direct</option>
+            </select>
+          </label>
+          <div class="field"><span>Ton rythme de marche</span>
+            <div class="seg" id="pace-seg" role="group" aria-label="Rythme de marche">
+              <button type="button" data-pace="calme">Tranquille<small>4 km/h</small></button>
+              <button type="button" data-pace="moyen">Moyen<small>5 km/h</small></button>
+              <button type="button" data-pace="sportif">Sportif<small>6 km/h</small></button>
+            </div>
+            <select id="pace" hidden aria-hidden="true" tabindex="-1">
+              <option value="calme">calme</option><option value="moyen">moyen</option><option value="sportif">sportif</option>
+            </select>
+          </div>
+          <label class="switch"><span>Boucle<small>Revenir au point de départ</small></span><input type="checkbox" id="loop"></label>
+        </section>
+      </div>
+
+      <!-- Onglet Mes randos -->
+      <div class="tabpanel" data-panel="hikes" role="tabpanel" aria-labelledby="tab-hikes" hidden>
+        <section class="card">
+          <div class="card-head">
+            <h2 class="label">Mes randos</h2>
+            <button class="btn accent" id="save" type="button" disabled>Enregistrer l'itinéraire</button>
+          </div>
+          <ul id="hikes"></ul>
+        </section>
+        <section class="card">
+          <h2 class="label">Sauvegarde</h2>
+          <p class="note">Pour changer de téléphone : sauvegarde (Drive, e-mail, Fichiers), puis importe le fichier dans l'app du nouveau téléphone.</p>
+          <div class="row-btns">
+            <button class="btn" id="backup" type="button">Sauvegarder mes randos</button>
+            <button class="btn" id="restore" type="button">Importer une sauvegarde</button>
+            <input id="restore-file" type="file" accept=".json,application/json" hidden>
+          </div>
+        </section>
+      </div>
+
+      <!-- Onglet Plus -->
+      <div class="tabpanel" data-panel="more" role="tabpanel" aria-labelledby="tab-more" hidden>
+        <section class="card">
+          <h2 class="label">Cartes hors ligne</h2>
+          <p class="note" id="off-info">Aucune carte enregistrée sur cet appareil.</p>
+          <label class="field"><span>Carte à enregistrer</span><select id="off-layer"></select></label>
+          <div class="row-btns">
+            <button class="btn accent" id="off-dl" type="button" disabled>Télécharger autour de l'itinéraire</button>
+            <button class="btn ghost" id="off-clear" type="button">Supprimer les cartes</button>
+          </div>
+          <p class="note" id="off-prog" hidden></p>
+          <p class="note">Possible avec les cartes IGN, ICGC et IGN Espagne (licences ouvertes), jusqu'au zoom 17. OpenStreetMap et OpenTopoMap interdisent le téléchargement.</p>
+        </section>
+        <section class="card">
+          <h2 class="label">Suivi</h2>
+          <label class="switch"><span>Garder l'écran allumé<small>Dans l'app, le suivi continue écran éteint grâce à la notification.</small></span><input type="checkbox" id="keepon"></label>
+        </section>
+        <section class="card">
+          <details class="help">
+            <summary>Envoyer sur la Fenix 6</summary>
+            <ol>
+              <li><b>Depuis l'app</b> : « Export GPX » ouvre le menu de partage. Enregistre le fichier (Fichiers ou Drive), puis importe-le dans Garmin Connect depuis un navigateur.</li>
+              <li><b>Garmin Connect (web)</b> : Entraînement, Parcours, Importer, choisis le .gpx, puis « Envoyer vers l'appareil ».</li>
+              <li><b>USB</b> : copie le .gpx dans le dossier <code>Garmin/NewFiles</code> de la montre.</li>
+              <li><b>Sur la montre</b> : activité Rando, Navigation, Parcours.</li>
+              <li><b>Sans montre</b> : « Suivre » te guide avec le téléphone et enregistre ta trace. Sans itinéraire, « Enregistrer » garde simplement ta sortie.</li>
+            </ol>
+          </details>
+        </section>
+      </div>
     </div>
-    <div class="export">
-      <button class="primary follow" id="follow" type="button" disabled>Suivre</button>
-      <button class="primary" id="gpx" type="button" disabled>Export GPX</button>
-    </div>
+
+    <footer class="actionbar">
+      <p id="status" role="status">Cherche une destination, ou touche la carte pour poser le départ.</p>
+      <div class="actions">
+        <button class="primary follow" id="follow" type="button">Enregistrer</button>
+        <button class="primary alt" id="gpx" type="button" disabled>Export GPX</button>
+      </div>
+    </footer>
   </aside>
   <div class="mapwrap">
     <div id="map" role="application" aria-label="Carte"></div>
     <div id="hud" hidden>
       <div id="hud-off" hidden></div>
       <p id="hud-msg">Recherche du signal GPS…</p>
-      <div class="hud-row">
+      <div class="hud-row" id="h-route">
         <div><b id="h-rest">—</b><span>Restant</span></div>
         <div><b id="h-up">—</b><span>D+ restant</span></div>
-        <div><b id="h-eta">—</b><span>Arrivée vers</span></div>
+        <div><b id="h-eta">—</b><span id="h-eta-lbl">Arrivée vers</span></div>
+      </div>
+      <div class="hud-row">
+        <div><b id="h-done">—</b><span>Parcouru</span></div>
+        <div><b id="h-time">—</b><span>Durée</span></div>
+        <div><b id="h-upd">—</b><span>D+ fait</span></div>
       </div>
       <button class="btn" id="h-recenter" type="button" hidden>Recentrer sur ma position</button>
     </div>
@@ -297,7 +392,7 @@ details.help li { margin-bottom: 6px; }
   const BROUTER = "https://brouter.de/brouter";
 
   /* ---------- état ---------- */
-  const state = { markers: [], profile: "hiking-mountain", loop: false, route: null, layer: "OpenTopoMap", name: "" };
+  const state = { markers: [], profile: "hiking-mountain", loop: false, route: null, layer: "OpenTopoMap", name: "", pace: "moyen", keepOn: null };
 
   function load() {
     try { return JSON.parse(localStorage.getItem(LS_KEY)) || {}; } catch { return {}; }
@@ -309,35 +404,108 @@ details.help li { margin-bottom: 6px; }
         names: state.markers.map((m) => m.placeName || ""),
         destFirst: destFirst && state.markers.length === 1,
         profile: state.profile, loop: state.loop, layer: state.layer, name: state.name,
+        pace: state.pace, keepOn: state.keepOn,
       }));
     } catch { /* stockage indisponible : on continue sans */ }
   }
   const saved = load();
   if (saved.profile) state.profile = saved.profile;
   state.loop = !!saved.loop;
+  if (saved.pace && ["calme", "moyen", "sportif"].includes(saved.pace)) state.pace = saved.pace;
+  if (typeof saved.keepOn === "boolean") state.keepOn = saved.keepOn;
   if (saved.layer) state.layer = saved.layer;
 
   const today = new Date();
   const defaultName = "Rando du " + today.toLocaleDateString("fr-FR", { day: "numeric", month: "long" });
   state.name = saved.name || defaultName;
 
+  /* ---------- greffons natifs (app Android) ---------- */
+  function plug(name) {
+    const c = window.Capacitor;
+    if (!(c && c.isNativePlatform && c.isNativePlatform())) return null;
+    return (c.Plugins && c.Plugins[name]) || null;
+  }
+
+  /* ---------- tuiles hors ligne : stockage ---------- */
+  // Seules les cartes sous licence ouverte peuvent être téléchargées à l'avance
+  const OFFLINE_LAYERS = ["IGN Plan (France)", "Satellite IGN (France)", "Topo Catalogne (ICGC)", "Topo Espagne (IGN-E)", "Satellite Espagne (PNOA)"];
+  const OFFLINE_MAX_ZOOM = 17;
+  const tileDB = (() => {
+    let p = null;
+    function open() {
+      if (p) return p;
+      p = new Promise((res, rej) => {
+        try {
+          const r = indexedDB.open("sentier-tiles", 1);
+          r.onupgradeneeded = () => r.result.createObjectStore("tiles");
+          r.onsuccess = () => res(r.result);
+          r.onerror = () => rej(r.error);
+        } catch (e) { rej(e); }
+      });
+      return p;
+    }
+    const req = (q) => new Promise((res) => { q.onsuccess = () => res(q.result); q.onerror = () => res(null); });
+    return {
+      async get(k) { const db = await open(); return req(db.transaction("tiles").objectStore("tiles").get(k)); },
+      async keys() { const db = await open(); return (await req(db.transaction("tiles").objectStore("tiles").getAllKeys())) || []; },
+      async put(k, v) {
+        const db = await open();
+        return new Promise((res, rej) => {
+          const tx = db.transaction("tiles", "readwrite");
+          tx.objectStore("tiles").put(v, k);
+          tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error); tx.onabort = () => rej(tx.error);
+        });
+      },
+      async clear() {
+        const db = await open();
+        return new Promise((res) => { const tx = db.transaction("tiles", "readwrite"); tx.objectStore("tiles").clear(); tx.oncomplete = () => res(); tx.onerror = () => res(); });
+      },
+    };
+  })();
+  const offlineKeys = new Set();
+  const tileKey = (layerName, z, x, y) => layerName + "/" + z + "/" + x + "/" + y;
+
+  // Couche de tuiles qui lit d'abord les tuiles téléchargées, puis le réseau
+  const OfflineTileLayer = L.TileLayer.extend({
+    createTile(coords, done) {
+      const tile = document.createElement("img");
+      L.DomEvent.on(tile, "load", L.Util.bind(this._tileOnLoad, this, done, tile));
+      L.DomEvent.on(tile, "error", L.Util.bind(this._tileOnError, this, done, tile));
+      tile.alt = "";
+      tile.setAttribute("role", "presentation");
+      const key = tileKey(this.options.offlineName, coords.z, coords.x, coords.y);
+      const net = () => { tile.src = this.getTileUrl(coords); };
+      if (!offlineKeys.has(key)) { net(); return tile; }
+      tileDB.get(key).then((v) => {
+        if (!v || !v.d) { net(); return; }
+        const u = URL.createObjectURL(new Blob([v.d], { type: v.t || "image/png" }));
+        tile.addEventListener("load", () => URL.revokeObjectURL(u), { once: true });
+        tile.src = u;
+      }).catch(net);
+      return tile;
+    },
+  });
+  function makeLayer(name, url, opts) {
+    return OFFLINE_LAYERS.includes(name) ? new OfflineTileLayer(url, Object.assign({ offlineName: name }, opts)) : L.tileLayer(url, opts);
+  }
+
   /* ---------- carte ---------- */
   const ign = (layer, fmt) =>
     "https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=" + layer +
     "&STYLE=normal&FORMAT=" + fmt + "&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}";
   const layers = {
-    "OpenTopoMap": L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", { maxZoom: 17, subdomains: "abc", attribution: "© OpenTopoMap, © OpenStreetMap" }),
-    "OpenStreetMap": L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" }),
-    "IGN Plan (France)": L.tileLayer(ign("GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2", "image/png"), { maxZoom: 18, attribution: "© IGN" }),
-    "Satellite IGN (France)": L.tileLayer(ign("ORTHOIMAGERY.ORTHOPHOTOS", "image/jpeg"), { maxZoom: 19, attribution: "© IGN" }),
-    "Topo Catalogne (ICGC)": L.tileLayer("https://geoserveis.icgc.cat/servei/catalunya/mapa-base/wmts/topografic/MON3857NW/{z}/{x}/{y}.png", { maxZoom: 20, attribution: "© ICGC" }),
-    "Topo Espagne (IGN-E)": L.tileLayer("https://www.ign.es/wmts/mapa-raster?service=WMTS&request=GetTile&version=1.0.0&Format=image/jpeg&layer=MTN&style=default&tilematrixset=GoogleMapsCompatible&TileMatrix={z}&TileRow={y}&TileCol={x}", { minZoom: 4, maxZoom: 18, attribution: "© IGN España" }),
-    "Satellite Espagne (PNOA)": L.tileLayer("https://www.ign.es/wmts/pnoa-ma?service=WMTS&request=GetTile&version=1.0.0&Format=image/png&layer=OI.OrthoimageCoverage&style=default&tilematrixset=GoogleMapsCompatible&TileMatrix={z}&TileRow={y}&TileCol={x}", { minZoom: 4, maxZoom: 19, attribution: "© IGN España, PNOA" }),
+    "OpenTopoMap": makeLayer("OpenTopoMap", "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", { maxZoom: 17, subdomains: "abc", attribution: "© OpenTopoMap, © OpenStreetMap" }),
+    "OpenStreetMap": makeLayer("OpenStreetMap", "https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" }),
+    "IGN Plan (France)": makeLayer("IGN Plan (France)", ign("GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2", "image/png"), { maxZoom: 18, attribution: "© IGN" }),
+    "Satellite IGN (France)": makeLayer("Satellite IGN (France)", ign("ORTHOIMAGERY.ORTHOPHOTOS", "image/jpeg"), { maxZoom: 19, attribution: "© IGN" }),
+    "Topo Catalogne (ICGC)": makeLayer("Topo Catalogne (ICGC)", "https://geoserveis.icgc.cat/servei/catalunya/mapa-base/wmts/topografic/MON3857NW/{z}/{x}/{y}.png", { maxZoom: 20, attribution: "© ICGC" }),
+    "Topo Espagne (IGN-E)": makeLayer("Topo Espagne (IGN-E)", "https://www.ign.es/wmts/mapa-raster?service=WMTS&request=GetTile&version=1.0.0&Format=image/jpeg&layer=MTN&style=default&tilematrixset=GoogleMapsCompatible&TileMatrix={z}&TileRow={y}&TileCol={x}", { minZoom: 4, maxZoom: 18, attribution: "© IGN España" }),
+    "Satellite Espagne (PNOA)": makeLayer("Satellite Espagne (PNOA)", "https://www.ign.es/wmts/pnoa-ma?service=WMTS&request=GetTile&version=1.0.0&Format=image/png&layer=OI.OrthoimageCoverage&style=default&tilematrixset=GoogleMapsCompatible&TileMatrix={z}&TileRow={y}&TileCol={x}", { minZoom: 4, maxZoom: 19, attribution: "© IGN España, PNOA" }),
   };
   if (!layers[state.layer]) state.layer = "OpenTopoMap";
 
   const map = L.map("map", { zoomControl: true, layers: [layers[state.layer]] }).setView([46.6, 2.5], 6);
-  L.control.layers(layers, null, { position: "topright" }).addTo(map);
+  const layerControl = L.control.layers(layers, null, { position: "topright" }).addTo(map);
   L.control.scale({ metric: true, imperial: false }).addTo(map);
   map.on("baselayerchange", (e) => { state.layer = e.name; save(); });
 
@@ -445,7 +613,7 @@ details.help li { margin-bottom: 6px; }
     const pts = state.markers.map((m) => m.getLatLng());
     if (pts.length < 2) {
       clearRoute();
-      setStatus(pts.length ? "Pose l'arrivée (ou coche « Boucle »)." : "Touche la carte pour poser le départ.");
+      setStatus(pts.length ? "Pose l'arrivée (ou coche « Boucle »)." : "Cherche une destination, ou touche la carte pour poser le départ.");
       return;
     }
     const seq = state.loop ? pts.concat([pts[0]]) : pts;
@@ -468,12 +636,12 @@ details.help li { margin-bottom: 6px; }
   }
 
   function clearRoute() {
-    if (nav.on) stopNav();
+    if (nav.on && nav.withRoute) stopNav();
     state.route = null;
     casing.setLatLngs([]); trace.setLatLngs([]);
     if (map.hasLayer(cursor)) map.removeLayer(cursor);
     showStats(null);
-    $("#gpx").disabled = true; $("#follow").disabled = true; $("#save").disabled = true;
+    $("#gpx").disabled = true; $("#save").disabled = true; updateFollowBtn(); renderOffInfo();
     drawProfile();
   }
 
@@ -510,14 +678,24 @@ details.help li { margin-bottom: 6px; }
     return Math.floor(m / 60) + " h " + String(m % 60).padStart(2, "0");
   }
 
+  // rythme de marche : vitesse à plat et montée par heure (règle de Naismith adaptée)
+  const PACES = {
+    calme: { kmh: 4, vh: 400 },
+    moyen: { kmh: 5, vh: 600 },
+    sportif: { kmh: 6, vh: 800 },
+  };
+  function hoursFor(m, up) {
+    const p = PACES[state.pace] || PACES.moyen;
+    return m / 1000 / p.kmh + up / p.vh;
+  }
+
   function showStats(r) {
     const set = (id, v, u) => { $(id).textContent = v; if (u) { const s = document.createElement("small"); s.textContent = u; $(id).append(s); } };
     if (!r) { set("#s-dist", "—", "km"); set("#s-up", "—", "m"); set("#s-down", "—", "m"); set("#s-time", "—"); return; }
     set("#s-dist", (r.dist / 1000).toFixed(1).replace(".", ","), "km");
     set("#s-up", String(Math.round(r.up)), "m");
     set("#s-down", String(Math.round(r.down)), "m");
-    // Règle de Naismith : 5 km/h à plat, plus 1 h par 600 m de montée
-    set("#s-time", "≈ " + fmtDuration(r.dist / 1000 / 5 + r.up / 600));
+    set("#s-time", "≈ " + fmtDuration(hoursFor(r.dist, r.up)));
   }
 
   function setRoute(coords) {
@@ -528,7 +706,7 @@ details.help li { margin-bottom: 6px; }
     casing.setLatLngs(ll); trace.setLatLngs(ll);
     if (firstFit || !hadRoute) { map.fitBounds(trace.getBounds(), { padding: [40, 40] }); firstFit = false; }
     showStats(r);
-    $("#gpx").disabled = false; $("#follow").disabled = false; $("#save").disabled = false;
+    $("#gpx").disabled = false; $("#save").disabled = false; updateFollowBtn(); renderOffInfo();
     drawProfile();
   }
 
@@ -731,6 +909,8 @@ details.help li { margin-bottom: 6px; }
   /* ---------- commandes ---------- */
   $("#profile").value = state.profile;
   $("#profile").addEventListener("change", (e) => { state.profile = e.target.value; save(); scheduleRoute(); });
+  $("#pace").value = state.pace;
+  $("#pace").addEventListener("change", (e) => { state.pace = e.target.value; save(); showStats(state.route); });
   $("#loop").checked = state.loop;
   $("#loop").addEventListener("change", (e) => { state.loop = e.target.checked; refreshMarkers(); save(); scheduleRoute(); });
   $("#undo").addEventListener("click", () => { const m = state.markers[state.markers.length - 1]; if (m) removePoint(m); });
@@ -759,7 +939,7 @@ details.help li { margin-bottom: 6px; }
   }
   function isDenied(e) {
     const m = String((e && (e.message || e)) || "");
-    return (e && e.code === 1) || /denied|permission/i.test(m);
+    return (e && (e.code === 1 || e.code === "NOT_AUTHORIZED")) || /denied|permission|not authori[sz]ed/i.test(m);
   }
   function locError(e) {
     const m = String((e && (e.message || e)) || "");
@@ -803,7 +983,7 @@ details.help li { margin-bottom: 6px; }
   $("#name").addEventListener("input", (e) => { state.name = e.target.value; save(); });
 
 
-  /* ---------- suivi de l'itinéraire (position GPS du téléphone) ---------- */
+  /* ---------- suivi et enregistrement (position GPS du téléphone) ---------- */
   /* NAV-MATH-START */
   function projectOnSegment(lat, lng, c1, c2) {
     const k = Math.cos((lat * Math.PI) / 180);
@@ -824,7 +1004,10 @@ details.help li { margin-bottom: 6px; }
   }
   /* NAV-MATH-END */
 
-  const nav = { on: false, id: null, first: true, lastIdx: 0, follow: true, off: 0, lastBuzz: 0, arrived: false, lock: null };
+  const nav = {
+    on: false, id: null, kind: null, withRoute: false, first: true, lastIdx: 0, follow: true,
+    off: 0, lastBuzz: 0, arrived: false, lock: null, startAlong: null, startUp: 0, tick: null,
+  };
   let meDot = null, meAcc = null;
 
   function locateOnRoute(lat, lng) {
@@ -839,10 +1022,22 @@ details.help li { margin-bottom: 6px; }
     return w;
   }
 
-  function buzz(pattern) { try { if (navigator.vibrate) navigator.vibrate(pattern); } catch { /* non bloquant */ } }
+  // vibrations : moteur natif dans l'app (fonctionne écran éteint), navigateur sinon
+  function buzz(pattern) {
+    const H = plug("Haptics");
+    if (H) {
+      let at = 0;
+      pattern.forEach((ms, i) => {
+        if (i % 2 === 0) setTimeout(() => { try { H.vibrate({ duration: ms }).catch(() => {}); } catch { /* ignoré */ } }, at);
+        at += ms;
+      });
+      return;
+    }
+    try { if (navigator.vibrate) navigator.vibrate(pattern); } catch { /* non bloquant */ }
+  }
 
   async function keepAwake(on) {
-    const KA = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.KeepAwake;
+    const KA = plug("KeepAwake");
     try {
       if (KA) { if (on) await KA.keepAwake(); else await KA.allowSleep(); return; }
       if (on && navigator.wakeLock) nav.lock = await navigator.wakeLock.request("screen");
@@ -850,8 +1045,66 @@ details.help li { margin-bottom: 6px; }
     } catch { /* écran non maintenu allumé : le suivi continue */ }
   }
 
-  function onFix(pos) {
-    const lat = pos.coords.latitude, lng = pos.coords.longitude, acc = pos.coords.accuracy || 0;
+  /* --- trace réelle --- */
+  const REC_KEY = "sentier.rec.v1";
+  let rec = null;
+  function recPersist() {
+    if (!rec) return;
+    try { localStorage.setItem(REC_KEY, JSON.stringify(rec)); } catch { /* stockage plein : la trace reste en mémoire */ }
+  }
+  function recClear() {
+    rec = null;
+    try { localStorage.removeItem(REC_KEY); } catch { /* ignoré */ }
+  }
+  function recStart() {
+    const now = new Date();
+    const day = now.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+    const hour = now.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+    rec = {
+      startedAt: Date.now(), endedAt: null, pts: [], dist: 0, up: 0, down: 0, ref: null, win: [],
+      name: nav.withRoute ? (state.name || defaultName) + " · réalisée le " + day : "Sortie du " + day + " à " + hour,
+    };
+    recPersist();
+  }
+  /* REC-ADD-START */
+  function recAdd(fix) {
+    if (!rec) return false;
+    const last = rec.pts[rec.pts.length - 1];
+    if (fix.acc > 35 && last) return false; // position trop imprécise
+    if (last) {
+      const d = hav(last, [fix.lng, fix.lat]);
+      const dt = (fix.t - last[3]) / 1000;
+      if (d < 5 && dt < 60) return false; // immobile : on n'ajoute rien
+      if (dt > 0 && d / dt > 12) return false; // saut de GPS (plus de 43 km/h à pied)
+      rec.dist += d;
+    }
+    if (fix.alt != null && Number.isFinite(fix.alt)) {
+      // altitude GPS lissée, seuil de 6 m pour ne pas compter le bruit
+      rec.win.push(fix.alt); if (rec.win.length > 5) rec.win.shift();
+      const e = rec.win.reduce((a, b) => a + b, 0) / rec.win.length;
+      if (rec.ref == null) rec.ref = e;
+      else if (e - rec.ref >= 6) { rec.up += e - rec.ref; rec.ref = e; }
+      else if (rec.ref - e >= 6) { rec.down += rec.ref - e; rec.ref = e; }
+    }
+    rec.pts.push([+fix.lng.toFixed(6), +fix.lat.toFixed(6), fix.alt == null ? null : Math.round(fix.alt * 10) / 10, fix.t]);
+    if (rec.pts.length % 10 === 0) recPersist();
+    return true;
+  }
+  /* REC-ADD-END */
+
+  const fmtKm = (m) => (m >= 1000 ? (m / 1000).toFixed(1).replace(".", ",") + " km" : Math.round(m / 10) * 10 + " m");
+  const fmtHM = (ms) => { const m = Math.floor(ms / 60000); return Math.floor(m / 60) + " h " + String(m % 60).padStart(2, "0"); };
+
+  function renderRecHud() {
+    if (!rec) return;
+    $("#h-done").textContent = fmtKm(rec.dist);
+    $("#h-time").textContent = fmtHM(Date.now() - rec.startedAt);
+    $("#h-upd").textContent = "≈ " + Math.round(rec.up) + " m";
+  }
+
+  function onFix(fix) {
+    const lat = fix.lat, lng = fix.lng, acc = fix.acc || 0;
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
     const ll = L.latLng(lat, lng);
     if (!meDot) {
       meAcc = L.circle(ll, { radius: acc, stroke: false, fillColor: "#1a73e8", fillOpacity: 0.12, interactive: false }).addTo(map);
@@ -859,19 +1112,34 @@ details.help li { margin-bottom: 6px; }
     } else {
       meDot.setLatLng(ll); meAcc.setLatLng(ll); meAcc.setRadius(acc);
     }
-    if (nav.first) map.setView(ll, Math.max(map.getZoom(), 16));
-    else if (nav.follow) map.panTo(ll, { animate: true, duration: 0.5 });
+    const wasFirst = nav.first;
+    if (wasFirst) map.setView(ll, Math.max(map.getZoom(), 16));
+    else if (nav.follow && !document.hidden) map.panTo(ll, { animate: true, duration: 0.5 });
+    nav.first = false;
+    $("#hud-msg").hidden = true;
 
-    const r = state.route;
+    recAdd(fix);
+    renderRecHud();
+
+    const r = nav.withRoute ? state.route : null;
     if (!r) return;
     const loc = locateOnRoute(lat, lng);
-    nav.first = false; nav.lastIdx = loc.i; meIdx = loc.i;
+    nav.lastIdx = loc.i; meIdx = loc.i;
+    if (nav.startAlong == null) { nav.startAlong = loc.along; nav.startUp = r.cumUp[loc.i]; }
 
     const remain = Math.max(0, r.dist - loc.along);
     const upLeft = Math.max(0, r.up - r.cumUp[loc.i]);
-    const hours = remain / 1000 / 5 + upLeft / 600; // même règle de Naismith que la durée totale
-    $("#hud-msg").hidden = true;
-    $("#h-rest").textContent = remain >= 1000 ? (remain / 1000).toFixed(1).replace(".", ",") + " km" : Math.round(remain / 10) * 10 + " m";
+    // heure d'arrivée : rythme choisi, corrigé par ta vitesse réelle après 10 min de marche
+    let factor = 1;
+    const elapsedH = (Date.now() - rec.startedAt) / 3600000;
+    const covered = loc.along - nav.startAlong;
+    if (elapsedH > 1 / 6 && covered > 500) {
+      const predicted = hoursFor(covered, Math.max(0, r.cumUp[loc.i] - nav.startUp));
+      if (predicted > 0) factor = Math.min(3, Math.max(0.5, elapsedH / predicted));
+      $("#h-eta-lbl").textContent = "Arrivée (ton rythme)";
+    }
+    const hours = hoursFor(remain, upLeft) * factor;
+    $("#h-rest").textContent = fmtKm(remain);
     $("#h-up").textContent = Math.round(upLeft) + " m";
     $("#h-eta").textContent = new Date(Date.now() + hours * 3600000).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
 
@@ -890,7 +1158,7 @@ details.help li { margin-bottom: 6px; }
     } else {
       nav.off = 0; banner.hidden = true;
     }
-    drawProfile();
+    if (!document.hidden) drawProfile();
   }
 
   function onFixError(e) {
@@ -902,48 +1170,184 @@ details.help li { margin-bottom: 6px; }
     }
   }
 
+  function updateFollowBtn() {
+    const b = $("#follow");
+    b.disabled = false;
+    b.textContent = nav.on ? "Arrêter" : state.route ? "Suivre" : "Enregistrer";
+  }
+
+  function wantKeepOn() {
+    if (state.keepOn != null) return !!state.keepOn;
+    return !plug("BackgroundGeolocation"); // dans l'app, l'écran peut s'éteindre ; sur le web il doit rester allumé
+  }
+
   async function startNav() {
-    if (!state.route || nav.on) return;
-    const G = nativeGeo();
-    if (!G && !navigator.geolocation) { setStatus("Localisation indisponible sur cet appareil.", true); return; }
-    nav.on = true; nav.first = true; nav.follow = true; nav.off = 0; nav.arrived = false; nav.lastBuzz = 0;
+    if (nav.on) return;
+    if (rec && !nav.on && !$("#recard").hidden) {
+      setStatus("Enregistre ou ignore d'abord la sortie précédente (encadré en haut).", true);
+      try { $("#recard").scrollIntoView({ block: "nearest" }); } catch { /* ignoré */ }
+      return;
+    }
+    const BG = plug("BackgroundGeolocation"), G = nativeGeo();
+    if (!BG && !G && !navigator.geolocation) { setStatus("Localisation indisponible sur cet appareil.", true); return; }
+    Object.assign(nav, { on: true, withRoute: !!state.route, first: true, follow: true, off: 0, arrived: false, lastBuzz: 0, startAlong: null, startUp: 0, lastIdx: 0 });
+    recStart();
     document.body.classList.add("following");
     state.markers.forEach((m) => { if (m.dragging) m.dragging.disable(); });
     $("#hud").hidden = false; $("#hud-off").hidden = true; $("#h-recenter").hidden = true;
+    $("#h-route").hidden = !nav.withRoute;
+    $("#h-eta-lbl").textContent = "Arrivée vers";
     $("#hud-msg").hidden = false; $("#hud-msg").textContent = "Recherche du signal GPS…";
     ["#h-rest", "#h-up", "#h-eta"].forEach((id) => { $(id).textContent = "—"; });
-    $("#follow").textContent = "Arrêter";
-    setStatus("Suivi en cours. Garde l'écran allumé.");
-    keepAwake(true);
+    renderRecHud();
+    updateFollowBtn();
+    nav.tick = setInterval(() => { if (!document.hidden) renderRecHud(); }, 15000);
+    if (wantKeepOn()) keepAwake(true);
+
+    if (BG) {
+      setStatus((nav.withRoute ? "Suivi en cours." : "Enregistrement en cours.") + " Tu peux éteindre l'écran : une notification reste affichée.");
+      try { const LN = plug("LocalNotifications"); if (LN) await LN.requestPermissions(); } catch { /* la notification peut rester masquée, le suivi continue */ }
+      if (!nav.on) return;
+      try {
+        nav.kind = "bg";
+        const id = await BG.addWatcher({
+          backgroundTitle: "Sentier",
+          backgroundMessage: nav.withRoute ? "Suivi de ton itinéraire en cours" : "Enregistrement de ta sortie en cours",
+          requestPermissions: true, stale: false, distanceFilter: 0,
+        }, (loc, err) => {
+          if (err) { onFixError(err); return; }
+          if (loc) onFix({ lat: loc.latitude, lng: loc.longitude, acc: loc.accuracy || 0, alt: loc.altitude, t: loc.time || Date.now() });
+        });
+        nav.id = id;
+        if (!nav.on) { BG.removeWatcher({ id }); nav.id = null; }
+      } catch (e) {
+        stopNav(); setStatus(locError(e), true);
+      }
+      return;
+    }
+
+    setStatus((nav.withRoute ? "Suivi en cours." : "Enregistrement en cours.") + " Garde l'écran allumé.");
     const opts = { enableHighAccuracy: true, maximumAge: 1000, timeout: 20000 };
+    const cb = (pos) => onFix({ lat: pos.coords.latitude, lng: pos.coords.longitude, acc: pos.coords.accuracy || 0, alt: pos.coords.altitude, t: pos.timestamp || Date.now() });
     if (G) {
       try { await ensureLocPermission(G); } catch (e) { stopNav(); setStatus(locError(e), true); return; }
       if (!nav.on) return;
-      nav.native = true;
-      nav.id = await G.watchPosition(opts, (pos, err) => { if (err) onFixError(err); else if (pos) onFix(pos); });
+      nav.kind = "native";
+      nav.id = await G.watchPosition(opts, (pos, err) => { if (err) onFixError(err); else if (pos) cb(pos); });
       if (!nav.on) { G.clearWatch({ id: nav.id }); nav.id = null; }
     } else {
-      nav.native = false;
-      nav.id = navigator.geolocation.watchPosition(onFix, onFixError, opts);
+      nav.kind = "web";
+      nav.id = navigator.geolocation.watchPosition(cb, onFixError, opts);
     }
   }
 
   function stopNav() {
     if (nav.id != null) {
-      if (nav.native) { const G = nativeGeo(); if (G) G.clearWatch({ id: nav.id }); }
-      else if (navigator.geolocation) navigator.geolocation.clearWatch(nav.id);
+      try {
+        if (nav.kind === "bg") { const BG = plug("BackgroundGeolocation"); if (BG) BG.removeWatcher({ id: nav.id }); }
+        else if (nav.kind === "native") { const G = nativeGeo(); if (G) G.clearWatch({ id: nav.id }); }
+        else if (navigator.geolocation) navigator.geolocation.clearWatch(nav.id);
+      } catch { /* déjà arrêté */ }
     }
-    nav.id = null; nav.on = false;
+    clearInterval(nav.tick);
+    nav.id = null; nav.on = false; nav.kind = null;
     keepAwake(false);
     document.body.classList.remove("following");
     state.markers.forEach((m) => { if (m.dragging) m.dragging.enable(); });
     if (meDot) { map.removeLayer(meDot); meDot = null; }
     if (meAcc) { map.removeLayer(meAcc); meAcc = null; }
     $("#hud").hidden = true;
-    $("#follow").textContent = "Suivre";
     meIdx = -1; drawProfile();
-    setStatus("Suivi arrêté.");
+    updateFollowBtn();
+    if (rec && rec.pts.length >= 2) {
+      rec.endedAt = Date.now();
+      recPersist();
+      showRecCard(false);
+      setStatus("Suivi arrêté. Ta sortie t'attend en haut du panneau.");
+    } else {
+      recClear();
+      setStatus("Suivi arrêté.");
+    }
   }
+
+  /* --- résumé de la sortie --- */
+  function showRecCard(recovered) {
+    if (!rec) return;
+    const dur = (rec.endedAt || (rec.pts.length ? rec.pts[rec.pts.length - 1][3] : rec.startedAt)) - rec.startedAt;
+    $("#rec-txt").innerHTML = "";
+    const b = document.createElement("b");
+    b.textContent = recovered ? "Sortie non terminée retrouvée" : "Ta sortie";
+    $("#rec-txt").append(b, document.createTextNode(" : " + fmtKm(rec.dist) + " · " + fmtHM(dur) + " · D+ ≈ " + Math.round(rec.up) + " m"));
+    $("#recard").hidden = false;
+    $("#rec-drop").textContent = "Ignorer";
+    $("#rec-drop").classList.remove("arm");
+    try { $("#recard").scrollIntoView({ block: "nearest" }); } catch { /* ignoré */ }
+  }
+
+  function buildTraceGPX(r) {
+    const name = esc(r.name);
+    let x = '<?xml version="1.0" encoding="UTF-8"?>\n' +
+      '<gpx version="1.1" creator="Sentier" xmlns="http://www.topografix.com/GPX/1/1">\n' +
+      "  <metadata><name>" + name + "</name><time>" + new Date(r.startedAt).toISOString() + "</time></metadata>\n" +
+      "  <trk>\n    <name>" + name + "</name>\n    <type>hiking</type>\n    <trkseg>\n";
+    r.pts.forEach((p) => {
+      x += '      <trkpt lat="' + p[1].toFixed(6) + '" lon="' + p[0].toFixed(6) + '">' +
+        (p[2] == null ? "" : "<ele>" + Number(p[2]).toFixed(1) + "</ele>") +
+        "<time>" + new Date(p[3]).toISOString() + "</time></trkpt>\n";
+    });
+    return x + "    </trkseg>\n  </trk>\n</gpx>\n";
+  }
+
+  function saveRec() {
+    if (!rec || rec.pts.length < 2) return;
+    const list = loadHikes();
+    let name = rec.name.trim(), k = 2;
+    while (list.some((h) => h.name === name)) name = rec.name.trim() + " (" + k++ + ")";
+    const f = rec.pts[0], l = rec.pts[rec.pts.length - 1];
+    const smooth = rec.pts.map((p) => p[2]);
+    const entry = {
+      id: String(Date.now()), name, savedAt: Date.now(), kind: "trace",
+      startedAt: rec.startedAt, duration: (rec.endedAt || l[3]) - rec.startedAt,
+      pts: [[f[1], f[0]], [l[1], l[0]]], names: ["", ""],
+      profile: state.profile, loop: false, dist: rec.dist, up: rec.up, down: rec.down,
+      track: rec.pts.map((p, i) => [p[0], p[1], smooth[i] == null ? 0 : smooth[i]]),
+      times: rec.pts.map((p) => Math.round((p[3] - rec.startedAt) / 1000)),
+    };
+    list.push(entry);
+    try {
+      localStorage.setItem(HK, JSON.stringify(list));
+    } catch {
+      setStatus("Enregistrement impossible : l'espace de stockage est plein. Exporte la trace en GPX ou supprime une rando.", true);
+      return;
+    }
+    recClear();
+    $("#recard").hidden = true;
+    renderHikes();
+    setStatus("Sortie « " + name + " » enregistrée dans Mes randos.");
+  }
+
+  $("#rec-save").addEventListener("click", saveRec);
+  $("#rec-gpx").addEventListener("click", async () => {
+    if (!rec) return;
+    const slug = rec.name.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase() || "sortie";
+    try {
+      await shareFile(slug + ".gpx", buildTraceGPX(rec), "application/gpx+xml");
+      setStatus("GPX de ta sortie prêt : " + slug + ".gpx");
+    } catch (e) {
+      if (!/cancel/i.test(String((e && e.message) || e))) setStatus("Export impossible : " + ((e && e.message) || e), true);
+    }
+  });
+  let dropArm = null;
+  $("#rec-drop").addEventListener("click", () => {
+    const b = $("#rec-drop");
+    if (dropArm) {
+      clearTimeout(dropArm); dropArm = null;
+      recClear(); $("#recard").hidden = true; setStatus("Sortie supprimée.");
+      return;
+    }
+    b.classList.add("arm"); b.textContent = "Supprimer la trace ?";
+    dropArm = setTimeout(() => { dropArm = null; b.classList.remove("arm"); b.textContent = "Ignorer"; }, 3000);
+  });
 
   $("#follow").addEventListener("click", () => { if (nav.on) stopNav(); else startNav(); });
   map.on("dragstart", () => { if (nav.on && nav.follow) { nav.follow = false; $("#h-recenter").hidden = false; } });
@@ -951,7 +1355,26 @@ details.help li { margin-bottom: 6px; }
     nav.follow = true; $("#h-recenter").hidden = true;
     if (meDot) map.panTo(meDot.getLatLng());
   });
-  document.addEventListener("visibilitychange", () => { if (nav.on && !document.hidden) keepAwake(true); });
+  document.addEventListener("visibilitychange", () => {
+    if (!nav.on) return;
+    if (document.hidden) { recPersist(); return; }
+    if (wantKeepOn()) keepAwake(true);
+    renderRecHud(); drawProfile();
+    if (nav.follow && meDot) map.panTo(meDot.getLatLng());
+  });
+
+  $("#keepon").checked = wantKeepOn();
+  $("#keepon").addEventListener("change", (e) => {
+    state.keepOn = e.target.checked; save();
+    if (nav.on) keepAwake(state.keepOn);
+  });
+
+  // trace interrompue (app fermée ou téléphone éteint pendant un enregistrement)
+  try {
+    const old = JSON.parse(localStorage.getItem(REC_KEY));
+    if (old && Array.isArray(old.pts) && old.pts.length >= 2 && Number.isFinite(old.startedAt)) { rec = old; showRecCard(!old.endedAt); }
+    else if (old) recClear();
+  } catch { recClear(); }
 
 
   /* ---------- randos enregistrées ---------- */
@@ -964,6 +1387,7 @@ details.help li { margin-bottom: 6px; }
     const ul = $("#hikes");
     ul.textContent = "";
     const list = loadHikes().sort((a, b) => b.savedAt - a.savedAt);
+    $("#hikes-count").textContent = list.length ? String(list.length) : "";
     if (!list.length) {
       const li = document.createElement("li");
       li.className = "hint";
@@ -978,7 +1402,8 @@ details.help li { margin-bottom: 6px; }
       const b = document.createElement("b");
       b.textContent = h.name;
       const small = document.createElement("small");
-      const km = h.dist ? (h.dist / 1000).toFixed(1).replace(".", ",") + " km" : "";
+      const km = (h.kind === "trace" ? "Trace réelle · " : "") + (h.dist ? (h.dist / 1000).toFixed(1).replace(".", ",") + " km" : "") +
+        (h.kind === "trace" && h.duration ? " · " + fmtHM(h.duration) : "");
       const up = h.up ? " · D+ " + Math.round(h.up) + " m" : "";
       const day = new Date(h.savedAt).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
       small.textContent = (km + up + (km ? " · " : "") + day);
@@ -1098,6 +1523,12 @@ details.help li { margin-bottom: 6px; }
       profile: ["hiking-mountain", "trekking", "shortest"].includes(h.profile) ? h.profile : "hiking-mountain",
     };
     if (okTrack) out.track = h.track.map((c) => [c[0], c[1], Number.isFinite(c[2]) ? c[2] : 0]);
+    if (h.kind === "trace") {
+      out.kind = "trace";
+      if (Number.isFinite(h.duration)) out.duration = h.duration;
+      if (Number.isFinite(h.startedAt)) out.startedAt = h.startedAt;
+      if (okTrack && Array.isArray(h.times) && h.times.length === h.track.length && h.times.every(Number.isFinite)) out.times = h.times.slice();
+    }
     if (Array.isArray(h.names) && h.names.length === h.pts.length && pts.length === h.pts.length) {
       out.names = h.names.map((x) => (typeof x === "string" ? x.slice(0, 70) : ""));
     }
@@ -1212,7 +1643,7 @@ details.help li { margin-bottom: 6px; }
       if (!destFirst || state.markers.length !== 1) return; // un départ a été posé entre-temps
       const start = L.latLng(pos.coords.latitude, pos.coords.longitude);
       if (start.distanceTo(ll) < 30) {
-        setStatus("Tu es déjà à « " + label + " ». Touche la carte pour poser le départ.");
+        setStatus("Tu es déjà à « " + label + " ». Cherche une destination, ou touche la carte pour poser le départ.");
         return;
       }
       insertStart(start);
@@ -1223,6 +1654,189 @@ details.help li { margin-bottom: 6px; }
       }
     }
   }
+
+  /* ---------- cartes hors ligne : téléchargement autour de l'itinéraire ---------- */
+  const OFF_META = "sentier.offline.v1";
+  function offMeta() { try { return JSON.parse(localStorage.getItem(OFF_META)) || { bytes: 0, areas: 0 }; } catch { return { bytes: 0, areas: 0 }; } }
+  function offMetaSave(m) { try { localStorage.setItem(OFF_META, JSON.stringify(m)); } catch { /* ignoré */ } }
+  function renderOffInfo() {
+    const m = offMeta();
+    $("#off-info").textContent = offlineKeys.size
+      ? offlineKeys.size + " tuiles enregistrées (≈ " + Math.max(1, Math.round(m.bytes / 1048576)) + " Mo)."
+      : "Aucune carte enregistrée sur cet appareil.";
+    $("#off-dl").disabled = !state.route && !off.running;
+  }
+
+  /* OFF-TILES-START */
+  // Tuiles à télécharger : un couloir autour du tracé, plus large aux petits zooms
+  const OFF_PLAN = [[12, 3000], [13, 2000], [14, 1500], [15, 1000], [16, 600], [17, 250]];
+  function tilesForRoute(coords, maxZoom) {
+    const out = [];
+    const seen = new Set();
+    OFF_PLAN.forEach(([z, radius]) => {
+      if (z > maxZoom) return;
+      const n = 2 ** z;
+      const tx = (lon) => ((lon + 180) / 360) * n;
+      const ty = (lat) => { const r = (lat * Math.PI) / 180; return ((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2) * n; };
+      for (let i = 0; i < coords.length; i++) {
+        const a = coords[i], b = coords[Math.min(i + 1, coords.length - 1)];
+        const tileM = (40075016 * Math.cos((a[1] * Math.PI) / 180)) / n;
+        const r = Math.max(1, Math.ceil(radius / tileM));
+        const steps = Math.max(1, Math.ceil(hav(a, b) / (tileM / 2)));
+        for (let s = 0; s < steps; s++) {
+          const lon = a[0] + ((b[0] - a[0]) * s) / steps, lat = a[1] + ((b[1] - a[1]) * s) / steps;
+          const x0 = Math.floor(tx(lon)), y0 = Math.floor(ty(lat));
+          for (let dx = -r; dx <= r; dx++) for (let dy = -r; dy <= r; dy++) {
+            const x = x0 + dx, y = y0 + dy;
+            if (x < 0 || y < 0 || x >= n || y >= n) continue;
+            const k = z + "/" + x + "/" + y;
+            if (!seen.has(k)) { seen.add(k); out.push({ z, x, y }); }
+          }
+        }
+      }
+    });
+    return out;
+  }
+  /* OFF-TILES-END */
+
+  async function fetchTile(url) {
+    const H = plug("CapacitorHttp");
+    if (H) {
+      // requête native : pas de blocage entre sites, et identification de l'app
+      const r = await H.get({ url, responseType: "blob", headers: { "User-Agent": "Sentier-app (rando perso)" } });
+      if (r.status !== 200) throw new Error("HTTP " + r.status);
+      const hd = r.headers || {};
+      const type = hd["Content-Type"] || hd["content-type"] || "";
+      if (!/^image\//.test(type)) throw new Error("pas une image");
+      const bin = atob(String(r.data));
+      const u8 = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+      return { t: type, d: u8.buffer };
+    }
+    const res = await fetch(url, { mode: "cors" });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const type = res.headers.get("content-type") || "";
+    if (!/^image\//.test(type)) throw new Error("pas une image");
+    return { t: type, d: await res.arrayBuffer() };
+  }
+
+  const off = { running: false, cancel: false, armed: null, plan: null };
+  function offLayerName() { return $("#off-layer").value; }
+
+  async function runDownload(plan, name) {
+    const layer = layers[name];
+    off.running = true; off.cancel = false;
+    $("#off-dl").textContent = "Annuler le téléchargement";
+    $("#off-dl").disabled = false;
+    const todo = plan.filter((t) => !offlineKeys.has(tileKey(name, t.z, t.x, t.y)));
+    let done = plan.length - todo.length, failed = 0, bytes = 0, idx = 0;
+    const prog = $("#off-prog");
+    prog.hidden = false;
+    const show = () => { prog.textContent = "Téléchargement : " + done + " / " + plan.length + " tuiles" + (failed ? " (" + failed + " indisponibles)" : "") + "…"; };
+    show();
+    async function worker() {
+      while (!off.cancel && idx < todo.length) {
+        const t = todo[idx++];
+        const url = L.Util.template(layer._url, { x: t.x, y: t.y, z: t.z, s: "a", r: "" });
+        try {
+          const v = await fetchTile(url);
+          await tileDB.put(tileKey(name, t.z, t.x, t.y), v);
+          offlineKeys.add(tileKey(name, t.z, t.x, t.y));
+          bytes += v.d.byteLength;
+        } catch { failed++; }
+        done++;
+        if (done % 10 === 0) show();
+      }
+    }
+    await Promise.all([worker(), worker(), worker(), worker()]);
+    const m = offMeta(); m.bytes += bytes; m.areas += 1; offMetaSave(m);
+    off.running = false;
+    $("#off-dl").textContent = "Télécharger autour de l'itinéraire";
+    renderOffInfo();
+    if (off.cancel) { prog.textContent = "Téléchargement annulé. Les tuiles déjà reçues sont gardées."; return; }
+    if (failed === plan.length) {
+      prog.textContent = plug("CapacitorHttp")
+        ? "Téléchargement impossible : vérifie la connexion, ou cette carte ne couvre pas la zone."
+        : "Le serveur de cette carte refuse le téléchargement depuis un navigateur. Utilise l'app Android pour les cartes hors ligne.";
+      return;
+    }
+    prog.textContent = "Carte « " + name + " » prête hors ligne autour de l'itinéraire" +
+      (failed ? " (" + failed + " tuiles hors de la zone couverte)" : "") + ", jusqu'au zoom " + OFFLINE_MAX_ZOOM + ".";
+    if (state.layer !== name) {
+      map.removeLayer(layers[state.layer]);
+      map.addLayer(layers[name]);
+      state.layer = name; save();
+    }
+  }
+
+  $("#off-dl").addEventListener("click", () => {
+    const b = $("#off-dl");
+    if (off.running) { off.cancel = true; b.disabled = true; return; }
+    if (!state.route) return;
+    const name = offLayerName();
+    if (!off.armed) {
+      const plan = tilesForRoute(state.route.coords, OFFLINE_MAX_ZOOM);
+      const missing = plan.filter((t) => !offlineKeys.has(tileKey(name, t.z, t.x, t.y))).length;
+      if (!missing) { $("#off-prog").hidden = false; $("#off-prog").textContent = "Cette zone est déjà enregistrée pour « " + name + " »."; return; }
+      if (plan.length > 6000) { $("#off-prog").hidden = false; $("#off-prog").textContent = "Itinéraire trop long pour un seul téléchargement (" + plan.length + " tuiles). Découpe-le en plusieurs randos."; return; }
+      const mo = Math.max(1, Math.round((missing * (/Satellite/.test(name) ? 35 : 20)) / 1024));
+      off.plan = plan;
+      $("#off-prog").hidden = false;
+      $("#off-prog").textContent = missing + " tuiles à télécharger, environ " + mo + " Mo. Touche « Confirmer » pour lancer (de préférence en Wi-Fi).";
+      b.textContent = "Confirmer";
+      off.armed = setTimeout(() => { off.armed = null; b.textContent = "Télécharger autour de l'itinéraire"; }, 8000);
+      return;
+    }
+    clearTimeout(off.armed); off.armed = null;
+    runDownload(off.plan, name);
+  });
+
+  let clearArm = null;
+  $("#off-clear").addEventListener("click", async () => {
+    const b = $("#off-clear");
+    if (off.running) return;
+    if (!clearArm) {
+      b.classList.add("arm"); b.textContent = "Tout supprimer ?";
+      clearArm = setTimeout(() => { clearArm = null; b.classList.remove("arm"); b.textContent = "Supprimer les cartes"; }, 3000);
+      return;
+    }
+    clearTimeout(clearArm); clearArm = null;
+    b.classList.remove("arm"); b.textContent = "Supprimer les cartes";
+    await tileDB.clear();
+    offlineKeys.clear(); offMetaSave({ bytes: 0, areas: 0 });
+    renderOffInfo();
+    $("#off-prog").hidden = false; $("#off-prog").textContent = "Cartes hors ligne supprimées.";
+  });
+
+  OFFLINE_LAYERS.forEach((n) => {
+    const o = document.createElement("option"); o.value = n; o.textContent = n; $("#off-layer").append(o);
+  });
+  $("#off-layer").value = OFFLINE_LAYERS.includes(state.layer) ? state.layer : "IGN Plan (France)";
+  map.on("baselayerchange", (e) => { if (OFFLINE_LAYERS.includes(e.name) && !off.running) $("#off-layer").value = e.name; });
+  tileDB.keys().then((ks) => { ks.forEach((k) => offlineKeys.add(String(k))); renderOffInfo(); map.eachLayer((l) => { if (l instanceof OfflineTileLayer) l.redraw(); }); })
+    .catch(() => { $("#off-info").textContent = "Stockage des cartes indisponible sur cet appareil."; });
+  renderOffInfo();
+
+  /* ---------- onglets et rythme ---------- */
+  function showTab(t) {
+    document.querySelectorAll(".tab").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === t)));
+    document.querySelectorAll(".tabpanel").forEach((p) => { p.hidden = p.dataset.panel !== t; });
+    try { localStorage.setItem("sentier.tab", t); } catch { /* ignoré */ }
+    if (t === "route") drawProfile();
+  }
+  document.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
+  try { const t = localStorage.getItem("sentier.tab"); if (t && document.querySelector('.tab[data-tab="' + t + '"]')) showTab(t); } catch { /* ignoré */ }
+
+  function syncPace() {
+    document.querySelectorAll("#pace-seg button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.pace === state.pace)));
+  }
+  document.querySelectorAll("#pace-seg button").forEach((b) => b.addEventListener("click", () => {
+    $("#pace").value = b.dataset.pace;
+    $("#pace").dispatchEvent(new Event("change"));
+    syncPace();
+  }));
+  syncPace();
+  updateFollowBtn();
 
   /* ---------- reprise de la session précédente ---------- */
   if (Array.isArray(saved.pts) && saved.pts.length) {
